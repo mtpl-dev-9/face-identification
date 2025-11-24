@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mb-5">
+  <h1 class="display-4 fw-bold" style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+    <i class="fas fa-user-check float-icon"></i> Welcome to Face Attendance System
+  </h1>
+  <p class="lead" style="color: rgba(255,255,255,0.9);">Advanced AI-powered attendance tracking with location verification</p>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-4 mb-3" style="color: var(--primary);">
+          <i class="fas fa-users"></i>
+        </div>
+        <h3 class="fw-bold">{{ persons_count }}</h3>
+        <p class="text-muted mb-0">Registered Persons</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-4 mb-3" style="color: var(--success);">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h3 class="fw-bold">{{ attendance_today }}</h3>
+        <p class="text-muted mb-0">Today's Attendance</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-4 mb-3" style="color: var(--info);">
+          <i class="fas fa-map-marker-alt"></i>
+        </div>
+        <h3 class="fw-bold"><i class="fas fa-check"></i></h3>
+        <p class="text-muted mb-0">Location Tracking</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-4 mb-3" style="color: var(--warning);">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+        <h3 class="fw-bold"><i class="fas fa-check"></i></h3>
+        <p class="text-muted mb-0">IP Protected</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="display-1 mb-3" style="color: var(--primary);">
+          <i class="fas fa-user-plus"></i>
+        </div>
+        <h4 class="card-title">Register Person</h4>
+        <p class="text-muted">Add new employees with face recognition</p>
+        <a href="{{ url_for('register_view') }}" class="btn btn-primary btn-lg w-100">
+          <i class="fas fa-arrow-right"></i> Get Started
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 glow">
+      <div class="card-body text-center">
+        <div class="display-1 mb-3" style="color: var(--success);">
+          <i class="fas fa-clock"></i>
+        </div>
+        <h4 class="card-title">Clock In/Out</h4>
+        <p class="text-muted">Mark attendance with location verification</p>
+        <a href="{{ url_for('attendance_clock_view') }}" class="btn btn-success btn-lg w-100">
+          <i class="fas fa-arrow-right"></i> Start Now
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="display-1 mb-3" style="color: var(--info);">
+          <i class="fas fa-chart-line"></i>
+        </div>
+        <h4 class="card-title">View Reports</h4>
+        <p class="text-muted">Analyze attendance data and insights</p>
+        <a href="{{ url_for('attendance_report_view') }}" class="btn btn-info btn-lg w-100">
+          <i class="fas fa-arrow-right"></i> View Reports
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-5">
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-body">
+        <h4 class="card-title text-center mb-4">
+          <i class="fas fa-star"></i> Key Features
+        </h4>
+        <div class="row text-center">
+          <div class="col-md-3 mb-3">
+            <i class="fas fa-face-smile fa-3x mb-3" style="color: var(--primary);"></i>
+            <h6>Face Recognition</h6>
+            <small class="text-muted">AI-powered face detection</small>
+          </div>
+          <div class="col-md-3 mb-3">
+            <i class="fas fa-location-dot fa-3x mb-3" style="color: var(--success);"></i>
+            <h6>Geofencing</h6>
+            <small class="text-muted">2m radius verification</small>
+          </div>
+          <div class="col-md-3 mb-3">
+            <i class="fas fa-network-wired fa-3x mb-3" style="color: var(--info);"></i>
+            <h6>IP Whitelist</h6>
+            <small class="text-muted">Secure access control</small>
+          </div>
+          <div class="col-md-3 mb-3">
+            <i class="fas fa-clock-rotate-left fa-3x mb-3" style="color: var(--warning);"></i>
+            <h6>Real-time Tracking</h6>
+            <small class="text-muted">Instant attendance logs</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

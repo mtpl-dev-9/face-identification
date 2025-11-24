@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 mx-auto">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title text-center mb-4">Clock In / Clock Out</h3>
+        
+        <div class="text-center mb-3">
+          <video id="video" width="100%" style="max-width: 500px; border-radius: 8px;" autoplay></video>
+          <canvas id="canvas" style="display:none;"></canvas>
+        </div>
+
+        <div class="d-flex justify-content-center gap-3 mb-3">
+          <button class="btn btn-success btn-lg" id="clockInBtn">
+            🕐 Clock In
+          </button>
+          <button class="btn btn-danger btn-lg" id="clockOutBtn">
+            🕐 Clock Out
+          </button>
+        </div>
+
+        <div id="statusDiv" class="alert" style="display:none;"></div>
+        
+        <div class="alert alert-info" id="helpDiv">
+          <strong>📍 Location Required:</strong> This system requires your location to verify you are at the office.
+          <br><small>If prompted, please click "Allow" to enable location access.</small>
+        </div>
+
+        <div id="infoDiv" class="mt-4">
+          <h5>Current Status:</h5>
+          <p id="locationInfo" class="text-muted">Getting location...</p>
+          <button class="btn btn-sm btn-outline-primary" id="retryLocationBtn" style="display:none;">
+            📍 Retry Location Access
+          </button>
+          <p id="ipInfo" class="text-muted mt-2">IP: <span id="ipAddress">Loading...</span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow mt-4">
+      <div class="card-body">
+        <h5>Today's Attendance</h5>
+        <div id="todayAttendance">
+          <p class="text-muted">No records yet</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const clockInBtn = document.getElementById("clockInBtn");
+const clockOutBtn = document.getElementById("clockOutBtn");
+const statusDiv = document.getElementById("statusDiv");
+const locationInfo = document.getElementById("locationInfo");
+const retryLocationBtn = document.getElementById("retryLocationBtn");
+
+let userLocation = null;
+let locationAttempted = false;
+
+// Start camera
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => video.srcObject = stream)
+  .catch(err => showStatus("Camera access denied", "danger"));
+
+// Get location with better error handling
+function requestLocation() {
+  if (!navigator.geolocation) {
+    locationInfo.innerHTML = "❌ Geolocation not supported by browser";
+    return;
+  }
+
+  locationAttempted = true;
+  locationInfo.innerHTML = "📍 Requesting location...";
+  
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      userLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      locationInfo.innerHTML = `✅ Location: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`;
+      locationInfo.className = "text-success";
+      const helpDiv = document.getElementById("helpDiv");
+      if (helpDiv) helpDiv.style.display = "none";
+    },
+    error => {
+      let errorMsg = "";
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMsg = "Location permission denied. Please allow location access in browser settings.";
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMsg = "Location unavailable. Please check your device settings.";
+          break;
+        case error.TIMEOUT:
+          errorMsg = "Location request timed out. Please try again.";
+          break;
+        default:
+          errorMsg = "Unknown location error.";
+      }
+      locationInfo.innerHTML = `❌ ${errorMsg}`;
+      locationInfo.className = "text-danger";
+      retryLocationBtn.style.display = "inline-block";
+      showStatus(errorMsg, "danger");
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
+// Request location on page load
+requestLocation();
+
+// Retry button handler
+retryLocationBtn.onclick = () => {
+  retryLocationBtn.style.display = "none";
+  requestLocation();
+};
+
+// Get IP
+fetch('https://api.ipify.org?format=json')
+  .then(res => res.json())
+  .then(data => document.getElementById('ipAddress').textContent = data.ip)
+  .catch(() => document.getElementById('ipAddress').textContent = 'Unknown');
+
+function showStatus(message, type) {
+  statusDiv.className = `alert alert-${type} alert-permanent`;
+  statusDiv.innerHTML = message;
+  statusDiv.style.display = "block";
+  statusDiv.style.animation = "bounceIn 0.5s ease-out";
+  
+  // Show popup notification
+  if (window.showToast) {
+    showToast(message, type);
+  }
+  
+  setTimeout(() => {
+    statusDiv.style.animation = "slideOutRight 0.5s ease-out";
+    setTimeout(() => statusDiv.style.display = "none", 500);
+  }, 5000);
+}
+
+function captureAndSend(action) {
+  if (!userLocation) {
+    if (!locationAttempted) {
+      requestLocation();
+    }
+    showStatus("Location not available. Please allow location access and try again.", "danger");
+    return;
+  }
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+  const imageData = canvas.toDataURL("image/jpeg");
+
+  const btn = action === "clock_in" ? clockInBtn : clockOutBtn;
+  btn.disabled = true;
+  btn.innerHTML = action === "clock_in" ? "⏳ Clocking In..." : "⏳ Clocking Out...";
+
+  fetch("/api/attendance/clock", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image: imageData,
+      action: action,
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      const successMsg = `✅ ${data.message}<br>📍 Distance from office: ${data.distance_from_office}m<br>👤 ${data.person.name} (${data.person.employee_code})`;
+      showStatus(successMsg, "success");
+      
+      // Play success sound
+      playNotificationSound();
+      
+      // Show large popup notification
+      showLargeNotification(data.message, action === "clock_in" ? "success" : "info");
+      
+      loadTodayAttendance();
+    } else {
+      showStatus(`❌ ${data.error}`, "danger");
+      playErrorSound();
+    }
+  })
+  .catch(err => showStatus(`❌ Error: ${err.message}`, "danger"))
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = action === "clock_in" ? "🕐 Clock In" : "🕐 Clock Out";
+  });
+}
+
+clockInBtn.onclick = () => captureAndSend("clock_in");
+clockOutBtn.onclick = () => captureAndSend("clock_out");
+
+function loadTodayAttendance() {
+  fetch("/api/attendance/latest")
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.results.length > 0) {
+        const today = data.results.filter(r => {
+          const recordDate = new Date(r.timestamp).toDateString();
+          return recordDate === new Date().toDateString();
+        });
+        
+        if (today.length > 0) {
+          const html = today.map(r => `
+            <div class="border-bottom pb-2 mb-2">
+              <strong>${r.person_name}</strong> (${r.employee_code})<br>
+              <small>
+                ${r.action === 'clock_in' ? '🟢' : '🔴'} ${r.action.replace('_', ' ').toUpperCase()}<br>
+                ${r.clock_in_time ? 'In: ' + new Date(r.clock_in_time).toLocaleTimeString() : ''}<br>
+                ${r.clock_out_time ? 'Out: ' + new Date(r.clock_out_time).toLocaleTimeString() : ''}
+              </small>
+            </div>
+          `).join('');
+          document.getElementById('todayAttendance').innerHTML = html;
+        }
+      }
+    });
+}
+
+loadTodayAttendance();
+setInterval(loadTodayAttendance, 30000);
+
+// Sound notification functions
+function playNotificationSound() {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.frequency.value = 800;
+  oscillator.type = 'sine';
+  
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.5);
+}
+
+function playErrorSound() {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.frequency.value = 300;
+  oscillator.type = 'sawtooth';
+  
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.3);
+}
+
+// Large notification popup
+function showLargeNotification(message, type) {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: ${type === 'success' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #3b82f6, #2563eb)'};
+    color: white;
+    padding: 3rem 4rem;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    z-index: 10000;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    animation: popIn 0.5s ease-out forwards;
+  `;
+  notification.innerHTML = `
+    <div style="font-size: 4rem; margin-bottom: 1rem;">${type === 'success' ? '✅' : '🔔'}</div>
+    <div>${message}</div>
+  `;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.animation = 'popOut 0.5s ease-out forwards';
+    setTimeout(() => notification.remove(), 500);
+  }, 3000);
+}
+
+// Add popup animations
+const popupStyle = document.createElement('style');
+popupStyle.textContent = `
+  @keyframes popIn {
+    0% {
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes popOut {
+    0% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+    }
+  }
+`;
+document.head.appendChild(popupStyle);
+</script>
+
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 mx-auto">
+    <div class="card shadow">
+      <div class="card-body text-center">
+        <h3 class="mb-4">📍 Get Your Office Coordinates</h3>
+        
+        <div class="alert alert-info">
+          <strong>Instructions:</strong> Go to your office location and open this page. 
+          Click the button below to get the exact coordinates.
+        </div>
+
+        <button class="btn btn-primary btn-lg" id="getLocationBtn">
+          📍 Get My Current Location
+        </button>
+
+        <div id="result" class="mt-4" style="display:none;">
+          <div class="alert alert-success">
+            <h5>✅ Your Coordinates:</h5>
+            <div class="mb-3">
+              <strong>Latitude:</strong> <code id="lat" style="font-size: 1.2em;"></code><br>
+              <strong>Longitude:</strong> <code id="lng" style="font-size: 1.2em;"></code>
+            </div>
+            
+            <hr>
+            
+            <h6>Copy this to config.py:</h6>
+            <div class="bg-dark text-light p-3 rounded">
+              <pre id="configCode" style="margin:0; color: #0f0;"></pre>
+            </div>
+            
+            <button class="btn btn-sm btn-outline-primary mt-3" onclick="copyConfig()">
+              📋 Copy to Clipboard
+            </button>
+          </div>
+
+          <div class="alert alert-warning">
+            <strong>Google Maps:</strong><br>
+            <a id="mapsLink" href="#" target="_blank" class="btn btn-sm btn-info">
+              🗺️ View on Google Maps
+            </a>
+          </div>
+        </div>
+
+        <div id="error" class="alert alert-danger mt-4" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const getLocationBtn = document.getElementById('getLocationBtn');
+const resultDiv = document.getElementById('result');
+const errorDiv = document.getElementById('error');
+
+getLocationBtn.onclick = () => {
+  getLocationBtn.disabled = true;
+  getLocationBtn.innerHTML = '⏳ Getting location...';
+  
+  if (!navigator.geolocation) {
+    showError('Geolocation is not supported by your browser');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      
+      document.getElementById('lat').textContent = lat;
+      document.getElementById('lng').textContent = lng;
+      
+      const configText = `OFFICE_LATITUDE = ${lat}\nOFFICE_LONGITUDE = ${lng}`;
+      document.getElementById('configCode').textContent = configText;
+      
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      document.getElementById('mapsLink').href = mapsUrl;
+      
+      resultDiv.style.display = 'block';
+      errorDiv.style.display = 'none';
+      getLocationBtn.innerHTML = '✅ Location Retrieved';
+    },
+    error => {
+      let msg = '';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          msg = 'Location permission denied. Please allow location access.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          msg = 'Location unavailable. Please check your device settings.';
+          break;
+        case error.TIMEOUT:
+          msg = 'Location request timed out. Please try again.';
+          break;
+        default:
+          msg = 'Unknown error occurred.';
+      }
+      showError(msg);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+};
+
+function showError(msg) {
+  errorDiv.textContent = '❌ ' + msg;
+  errorDiv.style.display = 'block';
+  resultDiv.style.display = 'none';
+  getLocationBtn.disabled = false;
+  getLocationBtn.innerHTML = '📍 Get My Current Location';
+}
+
+function copyConfig() {
+  const text = document.getElementById('configCode').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('✅ Copied to clipboard! Now paste it in config.py');
+  });
+}
+</script>
+
+{% endblock %}

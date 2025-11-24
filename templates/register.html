@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 mx-auto">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title mb-3 text-center">Register Person</h3>
+
+        <input type="text" id="live_name" class="form-control mb-2" placeholder="Full Name">
+        <input type="text" id="live_code" class="form-control mb-3" placeholder="Employee Code">
+
+        <video id="video" width="100%" autoplay></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+
+        <button class="btn btn-success mt-3" id="liveRegisterBtn">
+          📷 Register From Camera
+        </button>
+
+        <div id="liveStatus" class="mt-2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const liveBtn = document.getElementById("liveRegisterBtn");
+const statusDiv = document.getElementById("liveStatus");
+
+// Start camera
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => video.srcObject = stream)
+  .catch(err => {
+    statusDiv.innerHTML = "<span class='text-danger'>Camera access denied</span>";
+  });
+
+liveBtn.onclick = () => {
+  const name = document.getElementById("live_name").value;
+  const code = document.getElementById("live_code").value;
+
+  if(!name || !code){
+    statusDiv.innerHTML = "<span class='text-danger'>Name & Employee Code required</span>";
+    return;
+  }
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  const imageData = canvas.toDataURL("image/jpeg");
+
+  fetch("/api/register-face-live", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: name,
+      employee_code: code,
+      image: imageData
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success){
+      statusDiv.innerHTML = `<span class="text-success">✅ Registered ${data.person.name} successfully!</span>`;
+      document.getElementById("live_name").value = "";
+      document.getElementById("live_code").value = "";
+    } else {
+      statusDiv.innerHTML = `<span class="text-danger">❌ ${data.error}</span>`;
+    }
+  })
+  .catch(err => {
+    statusDiv.innerHTML = `<span class="text-danger">❌ Error: ${err.message}</span>`;
+  });
+};
+</script>
+
+{% endblock %}

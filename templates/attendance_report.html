@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title mb-4">Attendance Report (Clock In/Out)</h3>
+        
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Date</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Duration</th>
+                <th>Location</th>
+                <th>IP Address</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for record in records %}
+              <tr>
+                <td>{{ record.person.name }}</td>
+                <td>{{ record.person.employee_code }}</td>
+                <td>{{ record.timestamp.strftime('%Y-%m-%d') }}</td>
+                <td>
+                  {% if record.clock_in_time %}
+                    <span class="badge bg-success">{{ record.clock_in_time.strftime('%H:%M:%S') }}</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.clock_out_time %}
+                    <span class="badge bg-danger">{{ record.clock_out_time.strftime('%H:%M:%S') }}</span>
+                  {% else %}
+                    <span class="text-muted">Not clocked out</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.clock_in_time and record.clock_out_time %}
+                    {% set duration = (record.clock_out_time - record.clock_in_time).total_seconds() %}
+                    {% set hours = (duration // 3600)|int %}
+                    {% set minutes = ((duration % 3600) // 60)|int %}
+                    {{ hours }}h {{ minutes }}m
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.latitude and record.longitude %}
+                    <small>{{ "%.4f"|format(record.latitude) }}, {{ "%.4f"|format(record.longitude) }}</small>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  <small>{{ record.ip_address or '-' }}</small>
+                </td>
+                <td>
+                  {% if record.action == 'clock_in' %}
+                    <span class="badge bg-success">Clock In</span>
+                  {% elif record.action == 'clock_out' %}
+                    <span class="badge bg-danger">Clock Out</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ record.action }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="9" class="text-center text-muted">No attendance records found</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

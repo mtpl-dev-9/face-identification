@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h3 class="mb-3">Recent Attendance Records</h3>
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Person</th>
+          <th>Employee Code</th>
+          <th>Time</th>
+          <th>Status</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ r.person.name if r.person else '-' }}</td>
+          <td>{{ r.person.employee_code if r.person else '-' }}</td>
+          <td>{{ r.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.source }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center">No attendance records yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

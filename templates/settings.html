@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 mx-auto">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title mb-4">⚙️ Office Settings</h3>
+        
+        <form id="settingsForm">
+          <div class="mb-4">
+            <h5>📍 Office Location</h5>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Latitude</label>
+                <input type="number" step="any" class="form-control" id="latitude" 
+                       value="{{ settings.latitude }}" required>
+                <small class="text-muted">Example: 23.022797</small>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Longitude</label>
+                <input type="number" step="any" class="form-control" id="longitude" 
+                       value="{{ settings.longitude }}" required>
+                <small class="text-muted">Example: 72.531968</small>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="getCurrentLocation()">
+              📍 Use My Current Location
+            </button>
+            <a href="{{ url_for('get_location_view') }}" class="btn btn-sm btn-outline-info">
+              🗺️ Get Location Helper
+            </a>
+          </div>
+
+          <div class="mb-4">
+            <h5>🎯 Geofence Radius</h5>
+            <div class="mb-3">
+              <label class="form-label">Radius (meters)</label>
+              <input type="number" class="form-control" id="radius" 
+                     value="{{ settings.radius }}" required>
+              <small class="text-muted">
+                Recommended: 50-100 meters for production, 10000 for testing
+              </small>
+            </div>
+            <div class="alert alert-info">
+              <strong>Note:</strong> GPS accuracy is typically 5-10 meters. 
+              Setting radius too small (like 2m) may cause false rejections.
+            </div>
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary btn-lg">
+              💾 Save Location Settings
+            </button>
+          </div>
+        </form>
+
+        <div id="statusDiv" class="alert mt-3" style="display:none;"></div>
+
+
+
+        <hr class="my-4">
+
+        <div class="card bg-light">
+          <div class="card-body">
+            <h6>Current Settings Preview:</h6>
+            <p class="mb-1"><strong>Latitude:</strong> <span id="previewLat">{{ settings.latitude }}</span></p>
+            <p class="mb-1"><strong>Longitude:</strong> <span id="previewLng">{{ settings.longitude }}</span></p>
+            <p class="mb-1"><strong>Radius:</strong> <span id="previewRadius">{{ settings.radius }}</span> meters</p>
+            <a id="mapsLink" href="https://www.google.com/maps?q={{ settings.latitude }},{{ settings.longitude }}" 
+               target="_blank" class="btn btn-sm btn-success mt-2">
+              🗺️ View on Google Maps
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById('settingsForm');
+const statusDiv = document.getElementById('statusDiv');
+
+form.onsubmit = (e) => {
+  e.preventDefault();
+  
+  const latitude = parseFloat(document.getElementById('latitude').value);
+  const longitude = parseFloat(document.getElementById('longitude').value);
+  const radius = parseFloat(document.getElementById('radius').value);
+
+  if (isNaN(latitude) || isNaN(longitude) || isNaN(radius)) {
+    showStatus('Please enter valid numbers', 'danger');
+    return;
+  }
+
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ latitude, longitude, radius })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showStatus('✅ Settings saved successfully!', 'success');
+      updatePreview(data.settings);
+    } else {
+      showStatus('❌ Failed to save settings', 'danger');
+    }
+  })
+  .catch(err => {
+    showStatus('❌ Error: ' + err.message, 'danger');
+  });
+};
+
+function showStatus(message, type) {
+  statusDiv.className = `alert alert-${type}`;
+  statusDiv.innerHTML = message;
+  statusDiv.style.display = 'block';
+  setTimeout(() => statusDiv.style.display = 'none', 5000);
+}
+
+function updatePreview(settings) {
+  document.getElementById('previewLat').textContent = settings.latitude;
+  document.getElementById('previewLng').textContent = settings.longitude;
+  document.getElementById('previewRadius').textContent = settings.radius;
+  document.getElementById('mapsLink').href = `https://www.google.com/maps?q=${settings.latitude},${settings.longitude}`;
+}
+
+function getCurrentLocation() {
+  if (!navigator.geolocation) {
+    showStatus('Geolocation not supported', 'danger');
+    return;
+  }
+
+  showStatus('Getting your location...', 'info');
+
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      document.getElementById('latitude').value = position.coords.latitude;
+      document.getElementById('longitude').value = position.coords.longitude;
+      showStatus('✅ Location retrieved! Click Save to update.', 'success');
+    },
+    error => {
+      showStatus('❌ Could not get location. Please enter manually.', 'danger');
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+</script>
+
+{% endblock %}

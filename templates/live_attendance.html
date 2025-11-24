@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body text-center">
+        <h4 class="card-title mb-3">Live Camera</h4>
+        <video id="video" width="100%" autoplay></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        <p class="text-muted mt-2">
+          Allow camera access. The system will capture frames periodically,
+          recognize faces and log attendance automatically.
+        </p>
+        <div id="live-status" class="mt-2"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Latest Attendance</h5>
+        <ul id="attendanceList" class="list-group small"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
