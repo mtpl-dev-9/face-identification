@@ -89,11 +89,82 @@ def create_app():
         attendance_today = Attendance.query.filter(
             Attendance.timestamp >= today_start
         ).count()
+        
+        # Calculate absent count
+        attended_person_ids = db.session.query(Attendance.person_id).filter(
+            Attendance.timestamp >= today_start,
+            Attendance.clock_in_time.isnot(None)
+        ).distinct().all()
+        attended_ids = [pid[0] for pid in attended_person_ids]
+        absent_count = persons_count - len(attended_ids)
+        
         return render_template(
             "index.html",
             persons_count=persons_count,
             attendance_today=attendance_today,
+            absent_count=absent_count
         )
+
+    @app.route("/api/analytics/dashboard")
+    def api_analytics_dashboard():
+        now = get_ist_now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=now.weekday())
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Today's stats
+        today_records = Attendance.query.filter(
+            Attendance.timestamp >= today_start,
+            Attendance.clock_in_time.isnot(None)
+        ).all()
+        
+        late_count = sum(1 for r in today_records if r.clock_in_time and r.clock_in_time.hour >= 10)
+        overtime_count = sum(1 for r in today_records if r.clock_out_time and r.clock_out_time.hour >= 18)
+        
+        # Calculate absent count
+        attended_person_ids = db.session.query(Attendance.person_id).filter(
+            Attendance.timestamp >= today_start,
+            Attendance.clock_in_time.isnot(None)
+        ).distinct().all()
+        attended_ids = [pid[0] for pid in attended_person_ids]
+        total_persons = Person.query.count()
+        absent_count = total_persons - len(attended_ids)
+        
+        # Weekly data
+        weekly_data = []
+        for i in range(7):
+            day = week_start + timedelta(days=i)
+            day_end = day + timedelta(days=1)
+            count = Attendance.query.filter(
+                Attendance.timestamp >= day,
+                Attendance.timestamp < day_end,
+                Attendance.clock_in_time.isnot(None)
+            ).count()
+            weekly_data.append({"day": day.strftime("%a"), "count": count})
+        
+        # Monthly data (last 30 days)
+        monthly_data = []
+        for i in range(30):
+            day = today_start - timedelta(days=29-i)
+            day_end = day + timedelta(days=1)
+            count = Attendance.query.filter(
+                Attendance.timestamp >= day,
+                Attendance.timestamp < day_end,
+                Attendance.clock_in_time.isnot(None)
+            ).count()
+            monthly_data.append({"date": day.strftime("%d"), "count": count})
+        
+        return jsonify({
+            "today": {
+                "total": len(today_records),
+                "late": late_count,
+                "overtime": overtime_count,
+                "ontime": len(today_records) - late_count,
+                "absent": absent_count
+            },
+            "weekly": weekly_data,
+            "monthly": monthly_data
+        })
 
     # --- register with upload ---
     @app.route("/register", methods=["GET", "POST"])
@@ -164,6 +235,25 @@ def create_app():
     def persons_view():
         persons = Person.query.order_by(Person.created_at.desc()).all()
         return render_template("persons.html", persons=persons)
+
+    @app.route("/api/persons/<int:person_id>", methods=["DELETE", "POST"])
+    def api_delete_person(person_id):
+        try:
+            person = Person.query.get(person_id)
+            if not person:
+                return jsonify({"success": False, "error": "Person not found"}), 404
+            
+            # Delete associated attendance records first
+            Attendance.query.filter_by(person_id=person_id).delete()
+            
+            # Delete person
+            db.session.delete(person)
+            db.session.commit()
+            
+            return jsonify({"success": True, "message": "Person deleted successfully"})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
 
     # --- attendance log view ---
     @app.route("/attendance")
