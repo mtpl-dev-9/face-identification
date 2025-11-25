@@ -8,36 +8,36 @@
 </div>
 
 <div class="row g-4 mb-4">
-  <div class="col-md-3">
+  <div class="col-md-2">
     <div class="card text-center">
       <div class="card-body">
         <div class="display-4 mb-3" style="color: var(--primary);">
           <i class="fas fa-users"></i>
         </div>
         <h3 class="fw-bold">{{ persons_count }}</h3>
-        <p class="text-muted mb-0">Registered Persons</p>
+        <p class="text-muted mb-0">Registered</p>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-md-2">
     <div class="card text-center">
       <div class="card-body">
         <div class="display-4 mb-3" style="color: var(--success);">
           <i class="fas fa-check-circle"></i>
         </div>
-        <h3 class="fw-bold">{{ attendance_today }}</h3>
-        <p class="text-muted mb-0">Today's Attendance</p>
+        <h3 class="fw-bold" id="todayTotal">{{ attendance_today }}</h3>
+        <p class="text-muted mb-0">Present</p>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-md-2">
     <div class="card text-center">
       <div class="card-body">
-        <div class="display-4 mb-3" style="color: var(--info);">
-          <i class="fas fa-map-marker-alt"></i>
+        <div class="display-4 mb-3" style="color: var(--danger);">
+          <i class="fas fa-user-xmark"></i>
         </div>
-        <h3 class="fw-bold"><i class="fas fa-check"></i></h3>
-        <p class="text-muted mb-0">Location Tracking</p>
+        <h3 class="fw-bold" id="absentCount">{{ absent_count }}</h3>
+        <p class="text-muted mb-0">Absent</p>
       </div>
     </div>
   </div>
@@ -45,10 +45,44 @@
     <div class="card text-center">
       <div class="card-body">
         <div class="display-4 mb-3" style="color: var(--warning);">
-          <i class="fas fa-shield-alt"></i>
+          <i class="fas fa-clock"></i>
         </div>
-        <h3 class="fw-bold"><i class="fas fa-check"></i></h3>
-        <p class="text-muted mb-0">IP Protected</p>
+        <h3 class="fw-bold" id="lateCount">0</h3>
+        <p class="text-muted mb-0">Late Arrivals</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-4 mb-3" style="color: var(--info);">
+          <i class="fas fa-business-time"></i>
+        </div>
+        <h3 class="fw-bold" id="overtimeCount">0</h3>
+        <p class="text-muted mb-0">Overtime</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card" style="height: 400px;">
+      <div class="card-body">
+        <h5 class="card-title"><i class="fas fa-chart-line"></i> Weekly Attendance</h5>
+        <div style="height: 320px;">
+          <canvas id="weeklyChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card" style="height: 400px;">
+      <div class="card-body">
+        <h5 class="card-title"><i class="fas fa-chart-bar"></i> Monthly Trend (Last 30 Days)</h5>
+        <div style="height: 320px;">
+          <canvas id="monthlyChart"></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -132,4 +166,90 @@
     </div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let weeklyChart, monthlyChart;
+
+function loadAnalytics() {
+  fetch('/api/analytics/dashboard')
+    .then(res => res.json())
+    .then(data => {
+      // Update stats
+      document.getElementById('todayTotal').textContent = data.today.total;
+      document.getElementById('absentCount').textContent = data.today.absent;
+      document.getElementById('lateCount').textContent = data.today.late;
+      document.getElementById('overtimeCount').textContent = data.today.overtime;
+      
+      // Weekly Chart
+      const weeklyCtx = document.getElementById('weeklyChart').getContext('2d');
+      if (weeklyChart) weeklyChart.destroy();
+      weeklyChart = new Chart(weeklyCtx, {
+        type: 'bar',
+        data: {
+          labels: data.weekly.map(d => d.day),
+          datasets: [{
+            label: 'Attendance',
+            data: data.weekly.map(d => d.count),
+            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+            borderColor: 'rgba(102, 126, 234, 1)',
+            borderWidth: 2,
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          }
+        }
+      });
+      
+      // Monthly Chart
+      const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+      if (monthlyChart) monthlyChart.destroy();
+      monthlyChart = new Chart(monthlyCtx, {
+        type: 'line',
+        data: {
+          labels: data.monthly.map(d => d.date),
+          datasets: [{
+            label: 'Attendance',
+            data: data.monthly.map(d => d.count),
+            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+            borderColor: 'rgba(16, 185, 129, 1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          }
+        }
+      });
+    })
+    .catch(err => console.error('Error loading analytics:', err));
+}
+
+loadAnalytics();
+setInterval(loadAnalytics, 60000); // Refresh every minute
+</script>
 {% endblock %}
