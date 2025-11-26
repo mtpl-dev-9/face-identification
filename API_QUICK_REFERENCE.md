@@ -57,6 +57,47 @@ GET /api/analytics/dashboard
 GET /api/attendance/latest
 ```
 
+### 6. Break In
+```http
+POST /api/attendance/break
+Content-Type: application/json
+
+{
+  "action": "break_in",
+  "latitude": 23.022797,
+  "longitude": 72.531968
+}
+```
+
+### 7. Break Out
+```http
+POST /api/attendance/break
+Content-Type: application/json
+
+{
+  "action": "break_out",
+  "latitude": 23.022797,
+  "longitude": 72.531968
+}
+```
+
+### 8. Add Holiday
+```http
+POST /api/holidays
+Content-Type: application/json
+
+{
+  "date": "2024-01-26",
+  "name": "Republic Day",
+  "is_weekoff": false
+}
+```
+
+### 9. Get Holidays
+```http
+GET /api/holidays?year=2024&month=1
+```
+
 ---
 
 ## 📊 All Endpoints Summary
@@ -67,9 +108,13 @@ GET /api/attendance/latest
 | `POST` | `/api/register-face` | Register person with file upload |
 | `DELETE` | `/api/persons/{id}` | Delete person |
 | `POST` | `/api/attendance/clock` | Clock in/out with validation |
+| `POST` | `/api/attendance/break` | Break in/out |
 | `POST` | `/api/attendance/live-mark` | Mark attendance (legacy) |
 | `GET` | `/api/attendance/latest` | Get 20 recent records |
 | `GET` | `/api/analytics/dashboard` | Get analytics data |
+| `GET` | `/api/holidays` | Get holidays for month |
+| `POST` | `/api/holidays` | Add new holiday |
+| `DELETE` | `/api/holidays/{id}` | Delete holiday |
 | `GET` | `/api/settings` | Get office settings |
 | `POST` | `/api/settings` | Update office settings |
 | `GET` | `/api/allowed-ips` | Get IP whitelist |
@@ -132,7 +177,56 @@ navigator.geolocation.getCurrentPosition(async (pos) => {
 });
 ```
 
-### Use Case 3: Dashboard Integration
+### Use Case 3: Break Management
+```javascript
+// Break In
+navigator.geolocation.getCurrentPosition(async (pos) => {
+  const result = await fetch('/api/attendance/break', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      action: 'break_in',
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude
+    })
+  });
+});
+
+// Break Out (after 30 minutes)
+navigator.geolocation.getCurrentPosition(async (pos) => {
+  const result = await fetch('/api/attendance/break', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      action: 'break_out',
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude
+    })
+  });
+});
+```
+
+### Use Case 4: Holiday Management
+```javascript
+// Add holiday
+await fetch('/api/holidays', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    date: '2024-01-26',
+    name: 'Republic Day',
+    is_weekoff: false
+  })
+});
+
+// Get holidays for current month
+const holidays = await fetch('/api/holidays')
+  .then(res => res.json());
+
+console.log(holidays.holidays);
+```
+
+### Use Case 5: Dashboard Integration
 ```javascript
 // Fetch analytics for dashboard
 const analytics = await fetch('/api/analytics/dashboard')
@@ -314,11 +408,61 @@ class AttendanceAPI:
         return requests.get(
             f"{self.base_url}/api/analytics/dashboard"
         ).json()
+    
+    def break_in(self, lat, lng):
+        return requests.post(
+            f"{self.base_url}/api/attendance/break",
+            json={
+                "action": "break_in",
+                "latitude": lat,
+                "longitude": lng
+            }
+        ).json()
+    
+    def break_out(self, lat, lng):
+        return requests.post(
+            f"{self.base_url}/api/attendance/break",
+            json={
+                "action": "break_out",
+                "latitude": lat,
+                "longitude": lng
+            }
+        ).json()
+    
+    def add_holiday(self, date, name, is_weekoff=False):
+        return requests.post(
+            f"{self.base_url}/api/holidays",
+            json={
+                "date": date,
+                "name": name,
+                "is_weekoff": is_weekoff
+            }
+        ).json()
+    
+    def get_holidays(self, year=None, month=None):
+        params = {}
+        if year:
+            params['year'] = year
+        if month:
+            params['month'] = month
+        return requests.get(
+            f"{self.base_url}/api/holidays",
+            params=params
+        ).json()
 
 # Usage
 api = AttendanceAPI()
 result = api.register_person("John Doe", "EMP001", "photo.jpg")
 print(result)
+
+# Break management
+api.break_in(23.022797, 72.531968)
+api.break_out(23.022797, 72.531968)
+
+# Holiday management
+api.add_holiday("2024-01-26", "Republic Day", False)
+holidays = api.get_holidays(2024, 1)
+print(holidays)
 ```
 
 ---

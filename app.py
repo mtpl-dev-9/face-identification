@@ -12,10 +12,11 @@ from flask import (
     flash,
 )
 from flask_cors import CORS
+from flasgger import Swagger
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP
+from models import Person, Attendance, Settings, AllowedIP, Holiday
 from sqlalchemy import and_, func
 from datetime import date, datetime as dt
 import pytz
@@ -45,6 +46,7 @@ from face_utils import (
     get_face_encodings,
     encode_to_json,
     decode_from_json,
+    check_face_exists,
 )
 import face_recognition
 
@@ -59,6 +61,10 @@ def create_app():
 
     db.init_app(app)
     CORS(app)
+    
+    # Initialize Swagger
+    from swagger_config import swagger_config, swagger_template
+    Swagger(app, config=swagger_config, template=swagger_template)
 
     with app.app_context():
         db.create_all()
@@ -107,6 +113,15 @@ def create_app():
 
     @app.route("/api/analytics/dashboard")
     def api_analytics_dashboard():
+        """
+        Get Dashboard Analytics
+        ---
+        tags:
+          - Analytics
+        responses:
+          200:
+            description: Dashboard statistics
+        """
         now = get_ist_now()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today_start - timedelta(days=now.weekday())
@@ -191,7 +206,15 @@ def create_app():
             flash("No face found in the image. Try another photo.", "warning")
             return redirect(request.url)
         if len(encodings) > 1:
-            flash("Multiple faces found. Please upload a single face photo.", "warning")
+            flash("Multiple faces detected. Please upload a photo with only one face.", "warning")
+            return redirect(request.url)
+
+        # Check if face already registered
+        all_persons = Person.query.filter_by(is_active=True).all()
+        existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+        
+        if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
+            flash("This face is already registered. Cannot register the same person twice.", "danger")
             return redirect(request.url)
 
         encoding_json = encode_to_json(encodings[0])
@@ -221,7 +244,14 @@ def create_app():
        if not encodings:
            return jsonify({"success": False, "error": "No face detected"}), 422
        if len(encodings) > 1:
-           return jsonify({"success": False, "error": "Multiple faces detected"}), 422
+           return jsonify({"success": False, "error": "Multiple faces detected. Please show only one face."}), 422
+
+       # Check if face already registered
+       all_persons = Person.query.filter_by(is_active=True).all()
+       existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+       
+       if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
+           return jsonify({"success": False, "error": "This face is already registered"}), 400
 
        encoding_json = encode_to_json(encodings[0])
        person = Person(name=name, employee_code=emp_code, encoding=encoding_json)
@@ -289,10 +319,40 @@ def create_app():
 
     @app.route("/api/settings", methods=["GET"])
     def api_get_settings():
+        """
+        Get Office Settings
+        ---
+        tags:
+          - Settings
+        responses:
+          200:
+            description: Office settings
+        """
         return jsonify(get_office_settings())
 
     @app.route("/api/settings", methods=["POST"])
     def api_update_settings():
+        """
+        Update Office Settings
+        ---
+        tags:
+          - Settings
+        parameters:
+          - name: body
+            in: body
+            schema:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                radius:
+                  type: number
+        responses:
+          200:
+            description: Settings updated
+        """
         data = request.get_json() or {}
         
         if 'latitude' in data:
@@ -371,6 +431,13 @@ def create_app():
         if len(encodings) > 1:
             return jsonify({"success": False, "error": "multiple faces found"}), 422
 
+        # Check if face already registered
+        all_persons = Person.query.filter_by(is_active=True).all()
+        existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+        
+        if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
+            return jsonify({"success": False, "error": "face already registered"}), 400
+
         encoding_json = encode_to_json(encodings[0])
         person = Person(name=name, employee_code=emp_code, encoding=encoding_json)
         db.session.add(person)
@@ -380,6 +447,31 @@ def create_app():
 
     @app.route("/api/attendance/clock", methods=["POST"])
     def api_attendance_clock():
+        """
+        Clock In/Out with Face Recognition
+        ---
+        tags:
+          - Attendance
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                action:
+                  type: string
+                  enum: [clock_in, clock_out]
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+        responses:
+          200:
+            description: Success
+        """
         data = request.get_json(silent=True) or {}
         image_data = data.get("image")
         action = data.get("action")
@@ -524,6 +616,15 @@ def create_app():
 
     @app.route("/api/attendance/latest", methods=["GET"])
     def api_attendance_latest():
+        """
+        Get Latest Attendance Records
+        ---
+        tags:
+          - Attendance
+        responses:
+          200:
+            description: Latest 20 records
+        """
         records = Attendance.query.order_by(Attendance.timestamp.desc()).limit(20).all()
         return jsonify(
             {
@@ -531,6 +632,198 @@ def create_app():
                 "results": [r.to_dict() for r in records],
             }
         )
+
+    @app.route("/api/attendance/break", methods=["POST"])
+    def api_attendance_break():
+        """
+        Break In/Out
+        ---
+        tags:
+          - Attendance
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [break_in, break_out]
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+        responses:
+          200:
+            description: Break recorded
+        """
+        data = request.get_json(silent=True) or {}
+        action = data.get("action")
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
+
+        if not action:
+            return jsonify({"success": False, "error": "action required"}), 400
+
+        if action not in ["break_in", "break_out"]:
+            return jsonify({"success": False, "error": "action must be break_in or break_out"}), 400
+
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
+
+        allowed_ips = get_allowed_ips()
+        if client_ip not in allowed_ips:
+            return jsonify({"success": False, "error": f"Access denied. IP {client_ip} not allowed"}), 403
+
+        if latitude is None or longitude is None:
+            return jsonify({"success": False, "error": "Location required"}), 400
+
+        office_settings = get_office_settings()
+        distance_from_office = calculate_distance(
+            office_settings['latitude'],
+            office_settings['longitude'],
+            float(latitude),
+            float(longitude)
+        )
+
+        if distance_from_office > office_settings['radius']:
+            return jsonify({
+                "success": False,
+                "error": f"You are {distance_from_office:.2f}m away. Must be within {office_settings['radius']}m"
+            }), 403
+
+        now = get_ist_now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Find today's attendance record with clock_in
+        today_record = Attendance.query.filter(
+            Attendance.timestamp >= today_start,
+            Attendance.clock_in_time.isnot(None)
+        ).order_by(Attendance.timestamp.desc()).first()
+
+        if not today_record:
+            return jsonify({"success": False, "error": "No clock-in found today. Please clock in first"}), 400
+
+        if action == "break_in":
+            if today_record.break_in_time and not today_record.break_out_time:
+                return jsonify({"success": False, "error": "Already on break. Break out first"}), 400
+            
+            today_record.break_in_time = now
+            message = f"Break started at {now.strftime('%H:%M:%S')}"
+        else:
+            if not today_record.break_in_time:
+                return jsonify({"success": False, "error": "No break-in found. Break in first"}), 400
+            
+            if today_record.break_out_time:
+                return jsonify({"success": False, "error": "Already broke out"}), 400
+            
+            today_record.break_out_time = now
+            message = f"Break ended at {now.strftime('%H:%M:%S')}"
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "attendance": today_record.to_dict(),
+            "message": message,
+            "distance_from_office": round(distance_from_office, 2)
+        })
+
+    # --- holidays/leave management ---
+    @app.route("/holidays")
+    def holidays_view():
+        return render_template("holidays.html")
+
+    @app.route("/api/holidays", methods=["GET"])
+    def api_get_holidays():
+        """
+        Get Holidays for Month
+        ---
+        tags:
+          - Holidays
+        parameters:
+          - name: year
+            in: query
+            type: integer
+          - name: month
+            in: query
+            type: integer
+        responses:
+          200:
+            description: List of holidays
+        """
+        year = request.args.get('year', get_ist_now().year, type=int)
+        month = request.args.get('month', get_ist_now().month, type=int)
+        
+        holidays = Holiday.query.filter(
+            func.extract('year', Holiday.date) == year,
+            func.extract('month', Holiday.date) == month
+        ).all()
+        
+        return jsonify({"success": True, "holidays": [h.to_dict() for h in holidays]})
+
+    @app.route("/api/holidays", methods=["POST"])
+    def api_add_holiday():
+        """
+        Add New Holiday
+        ---
+        tags:
+          - Holidays
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                name:
+                  type: string
+                is_weekoff:
+                  type: boolean
+        responses:
+          200:
+            description: Holiday added
+        """
+        try:
+            data = request.get_json() or {}
+            date_str = data.get('date')
+            name = data.get('name')
+            is_weekoff = data.get('is_weekoff', False)
+            
+            if not date_str or not name:
+                return jsonify({"success": False, "error": "Date and name required"}), 400
+            
+            try:
+                holiday_date = dt.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+            
+            if Holiday.query.filter_by(date=holiday_date).first():
+                return jsonify({"success": False, "error": "Holiday already exists for this date"}), 400
+            
+            holiday = Holiday(date=holiday_date, name=name, is_weekoff=is_weekoff)
+            db.session.add(holiday)
+            db.session.commit()
+            
+            return jsonify({"success": True, "holiday": holiday.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+
+    @app.route("/api/holidays/<int:holiday_id>", methods=["DELETE"])
+    def api_delete_holiday(holiday_id):
+        holiday = Holiday.query.get(holiday_id)
+        if not holiday:
+            return jsonify({"success": False, "error": "Holiday not found"}), 404
+        
+        db.session.delete(holiday)
+        db.session.commit()
+        
+        return jsonify({"success": True})
 
     return app
 
