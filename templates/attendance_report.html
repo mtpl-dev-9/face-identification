@@ -15,10 +15,12 @@
                 <th>Date</th>
                 <th>Clock In</th>
                 <th>Clock Out</th>
-                <th>Duration</th>
+                <th>Break In</th>
+                <th>Break Out</th>
+                <th>Break Duration</th>
+                <th>Work Duration</th>
                 <th>Location</th>
                 <th>IP Address</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -38,14 +40,43 @@
                   {% if record.clock_out_time %}
                     <span class="badge bg-danger">{{ record.clock_out_time.strftime('%H:%M:%S') }}</span>
                   {% else %}
-                    <span class="text-muted">Not clocked out</span>
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.break_in_time %}
+                    <span class="badge bg-warning">{{ record.break_in_time.strftime('%H:%M:%S') }}</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.break_out_time %}
+                    <span class="badge bg-info">{{ record.break_out_time.strftime('%H:%M:%S') }}</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if record.break_in_time and record.break_out_time %}
+                    {% set break_duration = (record.break_out_time - record.break_in_time).total_seconds() %}
+                    {% set break_minutes = (break_duration // 60)|int %}
+                    {{ break_minutes }}m
+                  {% else %}
+                    -
                   {% endif %}
                 </td>
                 <td>
                   {% if record.clock_in_time and record.clock_out_time %}
-                    {% set duration = (record.clock_out_time - record.clock_in_time).total_seconds() %}
-                    {% set hours = (duration // 3600)|int %}
-                    {% set minutes = ((duration % 3600) // 60)|int %}
+                    {% set total_duration = (record.clock_out_time - record.clock_in_time).total_seconds() %}
+                    {% if record.break_in_time and record.break_out_time %}
+                      {% set break_duration = (record.break_out_time - record.break_in_time).total_seconds() %}
+                      {% set work_duration = total_duration - break_duration %}
+                    {% else %}
+                      {% set work_duration = total_duration %}
+                    {% endif %}
+                    {% set hours = (work_duration // 3600)|int %}
+                    {% set minutes = ((work_duration % 3600) // 60)|int %}
                     {{ hours }}h {{ minutes }}m
                   {% else %}
                     -
@@ -61,19 +92,10 @@
                 <td>
                   <small>{{ record.ip_address or '-' }}</small>
                 </td>
-                <td>
-                  {% if record.action == 'clock_in' %}
-                    <span class="badge bg-success">Clock In</span>
-                  {% elif record.action == 'clock_out' %}
-                    <span class="badge bg-danger">Clock Out</span>
-                  {% else %}
-                    <span class="badge bg-secondary">{{ record.action }}</span>
-                  {% endif %}
-                </td>
               </tr>
               {% else %}
               <tr>
-                <td colspan="9" class="text-center text-muted">No attendance records found</td>
+                <td colspan="11" class="text-center text-muted">No attendance records found</td>
               </tr>
               {% endfor %}
             </tbody>

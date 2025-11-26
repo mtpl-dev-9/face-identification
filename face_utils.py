@@ -41,3 +41,11 @@ def encode_to_json(encoding: np.ndarray) -> str:
 def decode_from_json(encoding_str: str) -> np.ndarray:
     """Deserialize JSON string back to numpy array."""
     return np.array(json.loads(encoding_str), dtype="float32")
+
+
+def check_face_exists(new_encoding: np.ndarray, existing_encodings: List[np.ndarray], tolerance: float = 0.6) -> bool:
+    """Check if a face encoding already exists in the database."""
+    if not existing_encodings:
+        return False
+    matches = face_recognition.compare_faces(existing_encodings, new_encoding, tolerance=tolerance)
+    return any(matches)

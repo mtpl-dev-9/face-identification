@@ -15,7 +15,8 @@ http://127.0.0.1:5000
 1. [Person Management](#person-management)
 2. [Attendance Operations](#attendance-operations)
 3. [Analytics & Reports](#analytics--reports)
-4. [Settings Management](#settings-management)
+4. [Holiday Management](#holiday-management)
+5. [Settings Management](#settings-management)
 
 ---
 
@@ -248,9 +249,83 @@ Retrieve the 20 most recent attendance records.
 
 ---
 
+### 7. Break In/Out
+Record break start and end times during work hours.
+
+**Endpoint:** `POST /api/attendance/break`
+
+**Request Body:**
+```json
+{
+  "action": "break_in",
+  "latitude": 23.022797,
+  "longitude": 72.531968
+}
+```
+
+**Parameters:**
+- `action` (string, required) - Either "break_in" or "break_out"
+- `latitude` (number, required) - User's latitude
+- `longitude` (number, required) - User's longitude
+
+**Response (Break In Success):**
+```json
+{
+  "success": true,
+  "attendance": {
+    "id": 10,
+    "person_id": 1,
+    "clock_in_time": "2024-01-15T09:30:00+05:30",
+    "break_in_time": "2024-01-15T12:00:00+05:30",
+    "break_out_time": null,
+    "timestamp": "2024-01-15T09:30:00+05:30"
+  },
+  "message": "Break started at 12:00:00",
+  "distance_from_office": 5.2
+}
+```
+
+**Response (Break Out Success):**
+```json
+{
+  "success": true,
+  "attendance": {
+    "id": 10,
+    "person_id": 1,
+    "clock_in_time": "2024-01-15T09:30:00+05:30",
+    "break_in_time": "2024-01-15T12:00:00+05:30",
+    "break_out_time": "2024-01-15T12:30:00+05:30",
+    "timestamp": "2024-01-15T09:30:00+05:30"
+  },
+  "message": "Break ended at 12:30:00",
+  "distance_from_office": 5.2
+}
+```
+
+**Response (Error):**
+```json
+{
+  "success": false,
+  "error": "No clock-in found today. Please clock in first"
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `400` - Missing fields or invalid state
+- `403` - Location or IP validation failed
+
+**Business Rules:**
+- Must clock in before taking a break
+- Cannot break in if already on break
+- Cannot break out without breaking in first
+- Location and IP validation applies
+
+---
+
 ## Analytics & Reports
 
-### 7. Dashboard Analytics
+### 8. Dashboard Analytics
 Get comprehensive analytics including today's stats, weekly, and monthly trends.
 
 **Endpoint:** `GET /api/analytics/dashboard`
@@ -294,7 +369,114 @@ Get comprehensive analytics including today's stats, weekly, and monthly trends.
 
 ## Settings Management
 
-### 8. Get Settings
+## Holiday Management
+
+### 9. Get Holidays
+Retrieve holidays for a specific month.
+
+**Endpoint:** `GET /api/holidays`
+
+**Query Parameters:**
+- `year` (integer, optional) - Year (default: current year)
+- `month` (integer, optional) - Month 1-12 (default: current month)
+
+**Example Request:**
+```
+GET /api/holidays?year=2024&month=1
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "holidays": [
+    {
+      "id": 1,
+      "date": "2024-01-26",
+      "name": "Republic Day",
+      "is_weekoff": false,
+      "created_at": "2024-01-01T10:00:00+05:30"
+    },
+    {
+      "id": 2,
+      "date": "2024-01-28",
+      "name": "Sunday",
+      "is_weekoff": true,
+      "created_at": "2024-01-01T10:00:00+05:30"
+    }
+  ]
+}
+```
+
+---
+
+### 10. Add Holiday
+Add a new holiday or week-off to the calendar.
+
+**Endpoint:** `POST /api/holidays`
+
+**Request Body:**
+```json
+{
+  "date": "2024-01-26",
+  "name": "Republic Day",
+  "is_weekoff": false
+}
+```
+
+**Parameters:**
+- `date` (string, required) - Date in YYYY-MM-DD format
+- `name` (string, required) - Holiday name
+- `is_weekoff` (boolean, optional) - True for weekly offs (default: false)
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "holiday": {
+    "id": 1,
+    "date": "2024-01-26",
+    "name": "Republic Day",
+    "is_weekoff": false,
+    "created_at": "2024-01-15T10:00:00+05:30"
+  }
+}
+```
+
+**Response (Error):**
+```json
+{
+  "success": false,
+  "error": "Holiday already exists for this date"
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `400` - Missing fields or invalid date format
+- `500` - Database error
+
+---
+
+### 11. Delete Holiday
+Remove a holiday from the calendar.
+
+**Endpoint:** `DELETE /api/holidays/{holiday_id}`
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `404` - Holiday not found
+
+---
+
+### 12. Get Settings
 Retrieve current office location and geofence settings.
 
 **Endpoint:** `GET /api/settings`
@@ -310,7 +492,7 @@ Retrieve current office location and geofence settings.
 
 ---
 
-### 9. Update Settings
+### 13. Update Settings
 Update office location and geofence radius.
 
 **Endpoint:** `POST /api/settings`
@@ -338,7 +520,7 @@ Update office location and geofence radius.
 
 ---
 
-### 10. Get Allowed IPs
+### 14. Get Allowed IPs
 Retrieve list of whitelisted IP addresses.
 
 **Endpoint:** `GET /api/allowed-ips`
@@ -368,7 +550,7 @@ Retrieve list of whitelisted IP addresses.
 
 ---
 
-### 11. Add Allowed IP
+### 15. Add Allowed IP
 Add a new IP address to the whitelist.
 
 **Endpoint:** `POST /api/allowed-ips`
@@ -397,7 +579,7 @@ Add a new IP address to the whitelist.
 
 ---
 
-### 12. Delete Allowed IP
+### 16. Delete Allowed IP
 Remove an IP address from the whitelist.
 
 **Endpoint:** `DELETE /api/allowed-ips/{ip_id}`
@@ -411,7 +593,7 @@ Remove an IP address from the whitelist.
 
 ---
 
-### 13. Toggle IP Status
+### 17. Toggle IP Status
 Enable or disable an IP address without deleting it.
 
 **Endpoint:** `POST /api/allowed-ips/{ip_id}/toggle`

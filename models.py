@@ -78,6 +78,25 @@ class Person(db.Model):
         }
 
 
+class Holiday(db.Model):
+    __tablename__ = "holidays"
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, unique=True, nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+    is_weekoff = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=get_ist_now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "date": self.date.isoformat(),
+            "name": self.name,
+            "is_weekoff": self.is_weekoff,
+            "created_at": self.created_at.isoformat() + "Z"
+        }
+
+
 class Attendance(db.Model):
     __tablename__ = "attendance"
 
@@ -92,6 +111,8 @@ class Attendance(db.Model):
     ip_address = db.Column(db.String(50), nullable=True)
     clock_in_time = db.Column(db.DateTime, nullable=True)
     clock_out_time = db.Column(db.DateTime, nullable=True)
+    break_in_time = db.Column(db.DateTime, nullable=True)
+    break_out_time = db.Column(db.DateTime, nullable=True)
 
     person = db.relationship("Person", backref="attendance_records")
 
@@ -110,4 +131,6 @@ class Attendance(db.Model):
             "ip_address": self.ip_address,
             "clock_in_time": self.clock_in_time.isoformat() + "Z" if self.clock_in_time else None,
             "clock_out_time": self.clock_out_time.isoformat() + "Z" if self.clock_out_time else None,
+            "break_in_time": self.break_in_time.isoformat() + "Z" if self.break_in_time else None,
+            "break_out_time": self.break_out_time.isoformat() + "Z" if self.break_out_time else None,
         }
