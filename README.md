@@ -6,7 +6,7 @@ This is a complete, advanced-level face-recognition-based attendance system buil
 - Flask
 - face_recognition (dlib)
 - OpenCV (only on server side for image handling)
-- SQLite + SQLAlchemy
+- MySQL + SQLAlchemy (MTPL Database Integration)
 
 ## Features
 
@@ -46,36 +46,31 @@ This is a complete, advanced-level face-recognition-based attendance system buil
 
 ## Setup
 
-1. Create venv and install deps:
+1. Install Python dependencies:
 
 ```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/macOS
-source venv/bin/activate
+pip install flask flask-cors flask-sqlalchemy pymysql cryptography face-recognition opencv-python pillow numpy flasgger pytz
+```
 
+Or use requirements.txt:
+
+```bash
 pip install -r requirements.txt
 ```
 
-> Note: `face-recognition` may require build tools (CMake, etc.). On Windows you might prefer installing a prebuilt Python/Anaconda or precompiled wheels.
+> Note: `face-recognition` requires CMake and dlib. On Windows, install Visual Studio Build Tools or use precompiled wheels from https://github.com/ageitgey/face_recognition
 
-2. Configure office location and IP whitelist in `config.py`:
+2. Configure MySQL database in `config.py`:
 
 ```python
+SQLALCHEMY_DATABASE_URI = "mysql+pymysql://root:@localhost:3306/mtpl_website"
 OFFICE_LATITUDE = 28.6139  # Your office latitude
 OFFICE_LONGITUDE = 77.2090  # Your office longitude
 GEOFENCE_RADIUS_METERS = 2  # 2 meters
 ALLOWED_IPS = ["127.0.0.1", "YOUR_OFFICE_IP"]
 ```
 
-3. Run database migration (if updating existing database):
-
-```bash
-python migrate_db.py
-```
-
-4. Run:
+3. Run:
 
 ```bash
 python app.py
@@ -83,9 +78,18 @@ python app.py
 
 5. Open `http://127.0.0.1:5000` in browser.
 
+## API Documentation
+
+Interactive Swagger API documentation available at:
+- **http://127.0.0.1:5000/api/docs**
+
+Detailed API documentation:
+- `API_DOCUMENTATION.md` - Complete API reference
+- `API_QUICK_REFERENCE.md` - Quick start guide
+
 ## Usage
 
-1. Go to **Register** and add people (name, employee code, face image).
+1. Go to **Register** and add people (name, numeric user ID, face image).
 
 2. **Clock In/Out** (Recommended):
    - Go to **Clock In/Out** page
@@ -108,3 +112,14 @@ python app.py
 4. View reports:
    - **Report**: Clock in/out times with location and IP
    - **Attendance Log**: All attendance records
+   - **Analytics Dashboard**: Today's stats, weekly and monthly trends
+
+## Database Structure
+
+Integrated with MTPL database (`mtpl_website`):
+- `mtpl_biometric` - Face encodings and user mappings
+- `mtpl_attendance` - Attendance records with clock in/out times
+- `mtpl_users` - User information (optional integration)
+- `mtpl_holidays` - Holiday calendar
+- `mtpl_allowed_ips` - IP whitelist
+- `mtpl_attendance_settings` - System settings

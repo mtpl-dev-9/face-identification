@@ -62,13 +62,10 @@ class Person(db.Model):
     __tablename__ = "mtpl_biometric"
 
     biometricId = db.Column('biometricId', db.Integer, primary_key=True)
-    biometricUserId = db.Column('biometricUserId', db.Integer, db.ForeignKey('mtpl_users.userId'), nullable=False)
+    biometricUserId = db.Column('biometricUserId', db.Integer, nullable=False)
     biometricEncoding = db.Column('biometricEncoding', db.Text, nullable=False)
     biometricCreatedAt = db.Column('biometricCreatedAt', db.DateTime, default=get_ist_now)
     biometricIsActive = db.Column('biometricIsActive', db.Boolean, default=True)
-
-    # Relationship to user table
-    user = db.relationship('User', backref='biometric_records')
 
     @property
     def id(self):
@@ -87,9 +84,8 @@ class Person(db.Model):
         return self.biometricCreatedAt
 
     def to_dict(self):
-        user_name = "Unknown"
-        if self.user:
-            user_name = f"{self.user.userFirstName} {self.user.userLastName}"
+        user = User.query.filter_by(userId=self.biometricUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.biometricUserId)
         
         return {
             "id": self.biometricId,
@@ -158,7 +154,7 @@ class Attendance(db.Model):
     __tablename__ = "mtpl_attendance"
 
     attendanceId = db.Column('attendanceId', db.Integer, primary_key=True)
-    attendanceUserId = db.Column('attendanceUserId', db.Integer, db.ForeignKey("mtpl_users.userId"), nullable=False)
+    attendanceUserId = db.Column('attendanceUserId', db.Integer, nullable=False)
     attendanceTimestamp = db.Column('attendanceTimestamp', db.DateTime, default=get_ist_now, index=True)
     attendanceSource = db.Column('attendanceSource', db.String(50), default="live_camera")
     attendanceStatus = db.Column('attendanceStatus', db.String(20), default="present")
@@ -170,8 +166,6 @@ class Attendance(db.Model):
     attendanceClockOutTime = db.Column('attendanceClockOutTime', db.DateTime, nullable=True)
     attendanceBreakInTime = db.Column('attendanceBreakInTime', db.DateTime, nullable=True)
     attendanceBreakOutTime = db.Column('attendanceBreakOutTime', db.DateTime, nullable=True)
-
-    user = db.relationship("User", backref="attendance_records")
 
     @property
     def id(self):
@@ -205,16 +199,16 @@ class Attendance(db.Model):
     def action(self):
         return self.attendanceAction
     
-    @property
-    def person(self):
-        return self.user
-
     def to_dict(self):
+        user = User.query.filter_by(userId=self.attendanceUserId).first()
+        person_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.attendanceUserId)
+        employee_code = user.userLogin if user else str(self.attendanceUserId)
+        
         return {
             "id": self.attendanceId,
             "person_id": self.attendanceUserId,
-            "person_name": f"{self.user.userFirstName} {self.user.userLastName}" if self.user else str(self.attendanceUserId),
-            "employee_code": self.user.userLogin if self.user else str(self.attendanceUserId),
+            "person_name": person_name,
+            "employee_code": employee_code,
             "timestamp": self.attendanceTimestamp.isoformat() + "Z",
             "source": self.attendanceSource,
             "status": self.attendanceStatus,

@@ -31,10 +31,12 @@ Register a new person with face encoding from base64 image.
 ```json
 {
   "name": "John Doe",
-  "employee_code": "EMP001",
+  "employee_code": "123",
   "image": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
 }
 ```
+
+**Note:** `employee_code` should be a numeric user ID.
 
 **Response (Success):**
 ```json
@@ -42,13 +44,16 @@ Register a new person with face encoding from base64 image.
   "success": true,
   "person": {
     "id": 1,
+    "user_id": 123,
     "name": "John Doe",
-    "employee_code": "EMP001",
+    "employee_code": "123",
     "is_active": true,
-    "created_at": "2024-01-15T10:30:00+05:30"
+    "created_at": "2024-01-15T10:30:00Z"
   }
 }
 ```
+
+**Note:** If user exists in `mtpl_users` table, `name` will be from user record, otherwise shows user ID.
 
 **Response (Error):**
 ```json
@@ -72,7 +77,7 @@ Register a new person with face encoding from file upload.
 
 **Request:** `multipart/form-data`
 - `name` (string, required)
-- `employee_code` (string, required)
+- `employee_code` (numeric string, required) - User ID
 - `image` (file, required)
 
 **Response:**
@@ -234,7 +239,7 @@ Retrieve the 20 most recent attendance records.
       "id": 10,
       "person_id": 1,
       "person_name": "John Doe",
-      "employee_code": "EMP001",
+      "employee_code": "123",
       "action": "clock_in",
       "clock_in_time": "2024-01-15T09:30:00+05:30",
       "clock_out_time": null,
