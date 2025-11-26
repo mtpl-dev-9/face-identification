@@ -220,7 +220,7 @@ def create_app():
         all_persons = Person.query.filter_by(biometricIsActive=True).all()
         existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
         
-        if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
+        if check_face_exists(encodings[0], existing_encodings, tolerance=app.config["FACE_RECOGNITION_TOLERANCE"]):
             flash("This face is already registered. Cannot register the same person twice.", "danger")
             return redirect(request.url)
 
@@ -233,45 +233,49 @@ def create_app():
         return redirect(url_for("index"))
     @app.route("/api/register-face-live", methods=["POST"])
     def api_register_face_live():
-       data = request.get_json() or {}
-
-       name = data.get("name")
-       user_id = data.get("employee_code")  # Using as user ID
-       image_data = data.get("image")
-
-       if not name or not user_id or not image_data:
-           return jsonify({"success": False, "error": "All fields required"}), 400
-
        try:
-           user_id_int = int(user_id)
-       except ValueError:
-           return jsonify({"success": False, "error": "User ID must be a number"}), 400
+           data = request.get_json() or {}
 
-       # Check if user ID already has biometric
-       if Person.query.filter_by(biometricUserId=user_id_int).first():
-           return jsonify({"success": False, "error": "Face already registered for this user ID"}), 400
+           name = data.get("name")
+           user_id = data.get("employee_code")  # Using as user ID
+           image_data = data.get("image")
 
-       img_array = load_image_from_base64(image_data)
-       encodings = get_face_encodings(img_array)
+           if not name or not user_id or not image_data:
+               return jsonify({"success": False, "error": "All fields required"}), 400
 
-       if not encodings:
-           return jsonify({"success": False, "error": "No face detected"}), 422
-       if len(encodings) > 1:
-           return jsonify({"success": False, "error": "Multiple faces detected. Please show only one face."}), 422
+           try:
+               user_id_int = int(user_id)
+           except ValueError:
+               return jsonify({"success": False, "error": "User ID must be a number"}), 400
 
-       # Check if face already registered
-       all_persons = Person.query.filter_by(biometricIsActive=True).all()
-       existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
-       
-       if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
-           return jsonify({"success": False, "error": "This face is already registered"}), 400
+           # Check if user ID already has biometric
+           if Person.query.filter_by(biometricUserId=user_id_int).first():
+               return jsonify({"success": False, "error": "Face already registered for this user ID"}), 400
 
-       encoding_json = encode_to_json(encodings[0])
-       person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
-       db.session.add(person)
-       db.session.commit()
+           img_array = load_image_from_base64(image_data)
+           encodings = get_face_encodings(img_array)
 
-       return jsonify({"success": True, "person": person.to_dict()})
+           if not encodings:
+               return jsonify({"success": False, "error": "No face detected"}), 422
+           if len(encodings) > 1:
+               return jsonify({"success": False, "error": "Multiple faces detected. Please show only one face."}), 422
+
+           # Check if face already registered
+           all_persons = Person.query.filter_by(biometricIsActive=True).all()
+           existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
+           
+           if check_face_exists(encodings[0], existing_encodings, tolerance=app.config["FACE_RECOGNITION_TOLERANCE"]):
+               return jsonify({"success": False, "error": "This face is already registered"}), 400
+
+           encoding_json = encode_to_json(encodings[0])
+           person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
+           db.session.add(person)
+           db.session.commit()
+
+           return jsonify({"success": True, "person": person.to_dict()})
+       except Exception as e:
+           db.session.rollback()
+           return jsonify({"success": False, "error": str(e)}), 500
 
     # --- people list ---
     @app.route("/persons")
@@ -454,7 +458,7 @@ def create_app():
         all_persons = Person.query.filter_by(biometricIsActive=True).all()
         existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
         
-        if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
+        if check_face_exists(encodings[0], existing_encodings, tolerance=app.config["FACE_RECOGNITION_TOLERANCE"]):
             return jsonify({"success": False, "error": "face already registered"}), 400
 
         encoding_json = encode_to_json(encodings[0])

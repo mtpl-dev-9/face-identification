@@ -16,7 +16,7 @@ Content-Type: application/json
 
 {
   "name": "John Doe",
-  "employee_code": "EMP001",
+  "employee_code": "123",
   "image": "data:image/jpeg;base64,..."
 }
 ```
@@ -150,7 +150,7 @@ const result = await fetch('/api/register-face-live', {
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({
     name: 'John Doe',
-    employee_code: 'EMP001',
+    employee_code: '123',
     image: imageBase64
   })
 });
@@ -296,7 +296,7 @@ const clockIn = async () => {
   const imageBase64 = `data:image/jpeg;base64,${photo.base64}`;
   
   // Clock in
-  const response = await fetch('http://YOUR_SERVER:5000/api/attendance/clock', {
+  const response = await fetch('http://YOUR_SERVER_IP:5000/api/attendance/clock', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -385,7 +385,7 @@ class AttendanceAPI:
             f"{self.base_url}/api/register-face-live",
             json={
                 "name": name,
-                "employee_code": emp_code,
+                "employee_code": str(emp_code),
                 "image": f"data:image/jpeg;base64,{image_b64}"
             }
         ).json()
@@ -452,7 +452,7 @@ class AttendanceAPI:
 
 # Usage
 api = AttendanceAPI()
-result = api.register_person("John Doe", "EMP001", "photo.jpg")
+result = api.register_person("John Doe", 123, "photo.jpg")
 print(result)
 
 # Break management
