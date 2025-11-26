@@ -29,13 +29,11 @@ class Config:
     # ============================================
     # DATABASE CONFIGURATION
     # ============================================
-    # XAMPP MySQL Configuration (default: no password for root)
+    # XAMPP MySQL Configuration for MTPL Database
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://root:@localhost:3306/face_attendance"
+        "mysql+pymysql://root:@localhost:3306/mtpl_website"
     )
-    # For SQLite (comment out MySQL and uncomment below):
-    # SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "instance", "attendance.db")
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {

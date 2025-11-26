@@ -16,7 +16,7 @@ from flasgger import Swagger
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User
 from sqlalchemy import and_, func
 from datetime import date, datetime as dt
 import pytz
@@ -71,11 +71,11 @@ def create_app():
 
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
-        persons: List[Person] = Person.query.filter_by(is_active=True).all()
+        persons: List[Person] = Person.query.filter_by(biometricIsActive=True).all()
         if not persons:
             return None, None
 
-        known_encodings = [decode_from_json(p.encoding) for p in persons]
+        known_encodings = [decode_from_json(p.biometricEncoding) for p in persons]
         known_labels = persons
 
         distances = face_recognition.face_distance(known_encodings, encoding)
@@ -93,13 +93,13 @@ def create_app():
         persons_count = Person.query.count()
         today_start = get_ist_now().replace(hour=0, minute=0, second=0, microsecond=0)
         attendance_today = Attendance.query.filter(
-            Attendance.timestamp >= today_start
+            Attendance.attendanceTimestamp >= today_start
         ).count()
         
         # Calculate absent count
-        attended_person_ids = db.session.query(Attendance.person_id).filter(
-            Attendance.timestamp >= today_start,
-            Attendance.clock_in_time.isnot(None)
+        attended_person_ids = db.session.query(Attendance.attendanceUserId).filter(
+            Attendance.attendanceTimestamp >= today_start,
+            Attendance.attendanceClockInTime.isnot(None)
         ).distinct().all()
         attended_ids = [pid[0] for pid in attended_person_ids]
         absent_count = persons_count - len(attended_ids)
@@ -129,17 +129,17 @@ def create_app():
         
         # Today's stats
         today_records = Attendance.query.filter(
-            Attendance.timestamp >= today_start,
-            Attendance.clock_in_time.isnot(None)
+            Attendance.attendanceTimestamp >= today_start,
+            Attendance.attendanceClockInTime.isnot(None)
         ).all()
         
-        late_count = sum(1 for r in today_records if r.clock_in_time and r.clock_in_time.hour >= 10)
-        overtime_count = sum(1 for r in today_records if r.clock_out_time and r.clock_out_time.hour >= 18)
+        late_count = sum(1 for r in today_records if r.attendanceClockInTime and r.attendanceClockInTime.hour >= 10)
+        overtime_count = sum(1 for r in today_records if r.attendanceClockOutTime and r.attendanceClockOutTime.hour >= 18)
         
         # Calculate absent count
-        attended_person_ids = db.session.query(Attendance.person_id).filter(
-            Attendance.timestamp >= today_start,
-            Attendance.clock_in_time.isnot(None)
+        attended_person_ids = db.session.query(Attendance.attendanceUserId).filter(
+            Attendance.attendanceTimestamp >= today_start,
+            Attendance.attendanceClockInTime.isnot(None)
         ).distinct().all()
         attended_ids = [pid[0] for pid in attended_person_ids]
         total_persons = Person.query.count()
@@ -151,9 +151,9 @@ def create_app():
             day = week_start + timedelta(days=i)
             day_end = day + timedelta(days=1)
             count = Attendance.query.filter(
-                Attendance.timestamp >= day,
-                Attendance.timestamp < day_end,
-                Attendance.clock_in_time.isnot(None)
+                Attendance.attendanceTimestamp >= day,
+                Attendance.attendanceTimestamp < day_end,
+                Attendance.attendanceClockInTime.isnot(None)
             ).count()
             weekly_data.append({"day": day.strftime("%a"), "count": count})
         
@@ -163,9 +163,9 @@ def create_app():
             day = today_start - timedelta(days=29-i)
             day_end = day + timedelta(days=1)
             count = Attendance.query.filter(
-                Attendance.timestamp >= day,
-                Attendance.timestamp < day_end,
-                Attendance.clock_in_time.isnot(None)
+                Attendance.attendanceTimestamp >= day,
+                Attendance.attendanceTimestamp < day_end,
+                Attendance.attendanceClockInTime.isnot(None)
             ).count()
             monthly_data.append({"date": day.strftime("%d"), "count": count})
         
@@ -188,15 +188,22 @@ def create_app():
             return render_template("register.html")
 
         name = request.form.get("name")
-        emp_code = request.form.get("employee_code")
+        user_id = request.form.get("employee_code")  # Using as user ID
         image_file = request.files.get("image")
 
-        if not name or not emp_code or not image_file:
-            flash("Name, employee code and image are required", "danger")
+        if not name or not user_id or not image_file:
+            flash("Name, user ID and image are required", "danger")
             return redirect(request.url)
 
-        if Person.query.filter_by(employee_code=emp_code).first():
-            flash("Employee code already exists", "danger")
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            flash("User ID must be a number", "danger")
+            return redirect(request.url)
+
+        # Check if user ID already has biometric
+        if Person.query.filter_by(biometricUserId=user_id_int).first():
+            flash("Face already registered for this user ID", "danger")
             return redirect(request.url)
 
         img_array = load_image_from_file_storage(image_file)
@@ -210,33 +217,39 @@ def create_app():
             return redirect(request.url)
 
         # Check if face already registered
-        all_persons = Person.query.filter_by(is_active=True).all()
-        existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+        all_persons = Person.query.filter_by(biometricIsActive=True).all()
+        existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
         
         if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
             flash("This face is already registered. Cannot register the same person twice.", "danger")
             return redirect(request.url)
 
         encoding_json = encode_to_json(encodings[0])
-        person = Person(name=name, employee_code=emp_code, encoding=encoding_json)
+        person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
         db.session.add(person)
         db.session.commit()
 
-        flash(f"Registered {name} ({emp_code})", "success")
+        flash(f"Registered user ID {user_id} successfully", "success")
         return redirect(url_for("index"))
     @app.route("/api/register-face-live", methods=["POST"])
     def api_register_face_live():
        data = request.get_json() or {}
 
        name = data.get("name")
-       emp_code = data.get("employee_code")
+       user_id = data.get("employee_code")  # Using as user ID
        image_data = data.get("image")
 
-       if not name or not emp_code or not image_data:
+       if not name or not user_id or not image_data:
            return jsonify({"success": False, "error": "All fields required"}), 400
 
-       if Person.query.filter_by(employee_code=emp_code).first():
-           return jsonify({"success": False, "error": "Employee code already exists"}), 400
+       try:
+           user_id_int = int(user_id)
+       except ValueError:
+           return jsonify({"success": False, "error": "User ID must be a number"}), 400
+
+       # Check if user ID already has biometric
+       if Person.query.filter_by(biometricUserId=user_id_int).first():
+           return jsonify({"success": False, "error": "Face already registered for this user ID"}), 400
 
        img_array = load_image_from_base64(image_data)
        encodings = get_face_encodings(img_array)
@@ -247,14 +260,14 @@ def create_app():
            return jsonify({"success": False, "error": "Multiple faces detected. Please show only one face."}), 422
 
        # Check if face already registered
-       all_persons = Person.query.filter_by(is_active=True).all()
-       existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+       all_persons = Person.query.filter_by(biometricIsActive=True).all()
+       existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
        
        if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
            return jsonify({"success": False, "error": "This face is already registered"}), 400
 
        encoding_json = encode_to_json(encodings[0])
-       person = Person(name=name, employee_code=emp_code, encoding=encoding_json)
+       person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
        db.session.add(person)
        db.session.commit()
 
@@ -263,7 +276,7 @@ def create_app():
     # --- people list ---
     @app.route("/persons")
     def persons_view():
-        persons = Person.query.order_by(Person.created_at.desc()).all()
+        persons = Person.query.order_by(Person.biometricCreatedAt.desc()).all()
         return render_template("persons.html", persons=persons)
 
     @app.route("/api/persons/<int:person_id>", methods=["DELETE", "POST"])
@@ -274,7 +287,7 @@ def create_app():
                 return jsonify({"success": False, "error": "Person not found"}), 404
             
             # Delete associated attendance records first
-            Attendance.query.filter_by(person_id=person_id).delete()
+            Attendance.query.filter_by(attendanceUserId=person.biometricUserId).delete()
             
             # Delete person
             db.session.delete(person)
@@ -288,12 +301,12 @@ def create_app():
     # --- attendance log view ---
     @app.route("/attendance")
     def attendance_view():
-        records = Attendance.query.order_by(Attendance.timestamp.desc()).limit(100).all()
+        records = Attendance.query.order_by(Attendance.attendanceTimestamp.desc()).limit(100).all()
         return render_template("attendance.html", records=records)
 
     @app.route("/attendance/report")
     def attendance_report_view():
-        records = Attendance.query.order_by(Attendance.timestamp.desc()).limit(100).all()
+        records = Attendance.query.order_by(Attendance.attendanceTimestamp.desc()).limit(100).all()
         return render_template("attendance_report.html", records=records)
 
     # --- live attendance camera page ---
@@ -414,14 +427,20 @@ def create_app():
     @app.route("/api/register-face", methods=["POST"])
     def api_register_face():
         name = request.form.get("name")
-        emp_code = request.form.get("employee_code")
+        user_id = request.form.get("employee_code")
         image_file = request.files.get("image")
 
-        if not name or not emp_code or not image_file:
-            return jsonify({"success": False, "error": "name, employee_code, image required"}), 400
+        if not name or not user_id or not image_file:
+            return jsonify({"success": False, "error": "name, user_id, image required"}), 400
 
-        if Person.query.filter_by(employee_code=emp_code).first():
-            return jsonify({"success": False, "error": "employee_code exists"}), 400
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            return jsonify({"success": False, "error": "user_id must be number"}), 400
+
+        # Check if user ID already has biometric
+        if Person.query.filter_by(biometricUserId=user_id_int).first():
+            return jsonify({"success": False, "error": "face already registered"}), 400
 
         img_array = load_image_from_file_storage(image_file)
         encodings = get_face_encodings(img_array)
@@ -432,14 +451,14 @@ def create_app():
             return jsonify({"success": False, "error": "multiple faces found"}), 422
 
         # Check if face already registered
-        all_persons = Person.query.filter_by(is_active=True).all()
-        existing_encodings = [decode_from_json(p.encoding) for p in all_persons]
+        all_persons = Person.query.filter_by(biometricIsActive=True).all()
+        existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
         
         if check_face_exists(encodings[0], existing_encodings, tolerance=0.6):
             return jsonify({"success": False, "error": "face already registered"}), 400
 
         encoding_json = encode_to_json(encodings[0])
-        person = Person(name=name, employee_code=emp_code, encoding=encoding_json)
+        person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
         db.session.add(person)
         db.session.commit()
 
@@ -527,39 +546,39 @@ def create_app():
         
         today_record = Attendance.query.filter(
             and_(
-                Attendance.person_id == person.id,
-                Attendance.timestamp >= today_start
+                Attendance.attendanceUserId == person.biometricUserId,
+                Attendance.attendanceTimestamp >= today_start
             )
-        ).order_by(Attendance.timestamp.desc()).first()
+        ).order_by(Attendance.attendanceTimestamp.desc()).first()
 
         if action == "clock_in":
-            if today_record and today_record.action == "clock_in" and not today_record.clock_out_time:
+            if today_record and today_record.attendanceAction == "clock_in" and not today_record.attendanceClockOutTime:
                 return jsonify({"success": False, "error": "Already clocked in. Clock out first"}), 400
 
             record = Attendance(
-                person_id=person.id,
-                status="present",
-                source="live_camera",
-                action="clock_in",
-                latitude=latitude,
-                longitude=longitude,
-                ip_address=client_ip,
-                clock_in_time=now,
-                timestamp=now
+                attendanceUserId=person.biometricUserId,
+                attendanceStatus="present",
+                attendanceSource="live_camera",
+                attendanceAction="clock_in",
+                attendanceLatitude=latitude,
+                attendanceLongitude=longitude,
+                attendanceIpAddress=client_ip,
+                attendanceClockInTime=now,
+                attendanceTimestamp=now
             )
             db.session.add(record)
             db.session.commit()
             message = f"Clocked in at {now.strftime('%H:%M:%S')}"
 
         else:
-            if not today_record or today_record.action != "clock_in":
+            if not today_record or today_record.attendanceAction != "clock_in":
                 return jsonify({"success": False, "error": "No clock-in found. Clock in first"}), 400
 
-            if today_record.clock_out_time:
+            if today_record.attendanceClockOutTime:
                 return jsonify({"success": False, "error": "Already clocked out today"}), 400
 
-            today_record.clock_out_time = now
-            today_record.action = "clock_out"
+            today_record.attendanceClockOutTime = now
+            today_record.attendanceAction = "clock_out"
             db.session.commit()
             record = today_record
             message = f"Clocked out at {now.strftime('%H:%M:%S')}"
@@ -596,9 +615,9 @@ def create_app():
         now = get_ist_now()
 
         # prevent spam: only one record per person per minute
-        last = Attendance.query.filter_by(person_id=person.id).order_by(Attendance.timestamp.desc()).first()
-        if not last or (now - last.timestamp) > timedelta(minutes=1):
-            record = Attendance(person_id=person.id, status="present", source="live_camera")
+        last = Attendance.query.filter_by(attendanceUserId=person.biometricUserId).order_by(Attendance.attendanceTimestamp.desc()).first()
+        if not last or (now - last.attendanceTimestamp) > timedelta(minutes=1):
+            record = Attendance(attendanceUserId=person.biometricUserId, attendanceStatus="present", attendanceSource="live_camera")
             db.session.add(record)
             db.session.commit()
         else:
@@ -625,7 +644,7 @@ def create_app():
           200:
             description: Latest 20 records
         """
-        records = Attendance.query.order_by(Attendance.timestamp.desc()).limit(20).all()
+        records = Attendance.query.order_by(Attendance.attendanceTimestamp.desc()).limit(20).all()
         return jsonify(
             {
                 "success": True,
@@ -699,27 +718,27 @@ def create_app():
         
         # Find today's attendance record with clock_in
         today_record = Attendance.query.filter(
-            Attendance.timestamp >= today_start,
-            Attendance.clock_in_time.isnot(None)
-        ).order_by(Attendance.timestamp.desc()).first()
+            Attendance.attendanceTimestamp >= today_start,
+            Attendance.attendanceClockInTime.isnot(None)
+        ).order_by(Attendance.attendanceTimestamp.desc()).first()
 
         if not today_record:
             return jsonify({"success": False, "error": "No clock-in found today. Please clock in first"}), 400
 
         if action == "break_in":
-            if today_record.break_in_time and not today_record.break_out_time:
+            if today_record.attendanceBreakInTime and not today_record.attendanceBreakOutTime:
                 return jsonify({"success": False, "error": "Already on break. Break out first"}), 400
             
-            today_record.break_in_time = now
+            today_record.attendanceBreakInTime = now
             message = f"Break started at {now.strftime('%H:%M:%S')}"
         else:
-            if not today_record.break_in_time:
+            if not today_record.attendanceBreakInTime:
                 return jsonify({"success": False, "error": "No break-in found. Break in first"}), 400
             
-            if today_record.break_out_time:
+            if today_record.attendanceBreakOutTime:
                 return jsonify({"success": False, "error": "Already broke out"}), 400
             
-            today_record.break_out_time = now
+            today_record.attendanceBreakOutTime = now
             message = f"Break ended at {now.strftime('%H:%M:%S')}"
 
         db.session.commit()
@@ -758,8 +777,8 @@ def create_app():
         month = request.args.get('month', get_ist_now().month, type=int)
         
         holidays = Holiday.query.filter(
-            func.extract('year', Holiday.date) == year,
-            func.extract('month', Holiday.date) == month
+            func.extract('year', Holiday.holidayDate) == year,
+            func.extract('month', Holiday.holidayDate) == month
         ).all()
         
         return jsonify({"success": True, "holidays": [h.to_dict() for h in holidays]})
@@ -802,10 +821,10 @@ def create_app():
             except ValueError:
                 return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
             
-            if Holiday.query.filter_by(date=holiday_date).first():
+            if Holiday.query.filter_by(holidayDate=holiday_date).first():
                 return jsonify({"success": False, "error": "Holiday already exists for this date"}), 400
             
-            holiday = Holiday(date=holiday_date, name=name, is_weekoff=is_weekoff)
+            holiday = Holiday(holidayDate=holiday_date, holidayName=name, holidayIsWeekoff=is_weekoff)
             db.session.add(holiday)
             db.session.commit()
             
