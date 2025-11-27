@@ -201,6 +201,12 @@ def create_app():
             flash("User ID must be a number", "danger")
             return redirect(request.url)
 
+        # Check if user exists and is active
+        user = User.query.filter_by(userId=user_id_int, userIsActive='1').first()
+        if not user:
+            flash("User ID not found or inactive", "danger")
+            return redirect(request.url)
+
         # Check if user ID already has biometric
         if Person.query.filter_by(biometricUserId=user_id_int).first():
             flash("Face already registered for this user ID", "danger")
@@ -235,22 +241,28 @@ def create_app():
     def api_register_face_live():
        try:
            data = request.get_json() or {}
-
-           name = data.get("name")
-           user_id = data.get("employee_code")  # Using as user ID
+           user_id = data.get("user_id")
            image_data = data.get("image")
 
-           if not name or not user_id or not image_data:
-               return jsonify({"success": False, "error": "All fields required"}), 400
+           if not user_id or not image_data:
+               return jsonify({"success": False, "error": "User ID and image required"}), 400
 
            try:
                user_id_int = int(user_id)
            except ValueError:
-               return jsonify({"success": False, "error": "User ID must be a number"}), 400
+               return jsonify({"success": False, "error": "Invalid user ID"}), 400
 
-           # Check if user ID already has biometric
-           if Person.query.filter_by(biometricUserId=user_id_int).first():
-               return jsonify({"success": False, "error": "Face already registered for this user ID"}), 400
+           # Check if user exists and is active
+           user = User.query.filter_by(userId=user_id_int, userIsActive='1').first()
+           if not user:
+               return jsonify({"success": False, "error": "User not found or inactive"}), 404
+
+           # Check if user already has biometric (allow update if exists)
+           existing_person = Person.query.filter_by(biometricUserId=user_id_int).first()
+           if existing_person:
+               # Delete old biometric for update
+               db.session.delete(existing_person)
+               db.session.commit()
 
            img_array = load_image_from_base64(image_data)
            encodings = get_face_encodings(img_array)
@@ -428,6 +440,32 @@ def create_app():
 
     # ---------- APIs ----------
 
+    @app.route("/api/biometric/check/<int:user_id>", methods=["GET"])
+    def api_check_biometric(user_id):
+        """Check if user has biometric registered"""
+        person = Person.query.filter_by(biometricUserId=user_id, biometricIsActive=True).first()
+        return jsonify({
+            "success": True,
+            "hasBiometric": person is not None,
+            "biometricId": person.biometricId if person else None
+        })
+
+    @app.route("/api/biometric/<int:user_id>", methods=["DELETE"])
+    def api_delete_biometric(user_id):
+        """Delete user's biometric data"""
+        try:
+            person = Person.query.filter_by(biometricUserId=user_id).first()
+            if not person:
+                return jsonify({"success": False, "error": "No biometric found"}), 404
+            
+            db.session.delete(person)
+            db.session.commit()
+            
+            return jsonify({"success": True, "message": "Biometric deleted successfully"})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
     @app.route("/api/register-face", methods=["POST"])
     def api_register_face():
         name = request.form.get("name")
@@ -441,6 +479,11 @@ def create_app():
             user_id_int = int(user_id)
         except ValueError:
             return jsonify({"success": False, "error": "user_id must be number"}), 400
+
+        # Check if user exists and is active
+        user = User.query.filter_by(userId=user_id_int, userIsActive='1').first()
+        if not user:
+            return jsonify({"success": False, "error": "user not found or inactive"}), 404
 
         # Check if user ID already has biometric
         if Person.query.filter_by(biometricUserId=user_id_int).first():
@@ -543,6 +586,11 @@ def create_app():
 
         if not person:
             return jsonify({"success": False, "error": "Unknown face"}), 404
+
+        # Verify user is still active
+        user = User.query.filter_by(userId=person.biometricUserId, userIsActive='1').first()
+        if not user:
+            return jsonify({"success": False, "error": "User account is inactive"}), 403
 
         now = get_ist_now()
         today = now.date()
