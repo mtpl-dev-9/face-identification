@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h2><i class="fas fa-umbrella-beach"></i> Leave Management System</h2>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mt-4" role="tablist">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#admin">Admin Panel</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#employee">Employee Panel</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#requests">Leave Requests</a></li>
+</ul>
+
+<div class="tab-content mt-3">
+  <!-- Admin Panel -->
+  <div id="admin" class="tab-pane fade show active">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-list"></i> Manage Leave Types</div>
+          <div class="card-body">
+            <div class="input-group mb-3">
+              <input type="text" id="newLeaveType" class="form-control" placeholder="e.g., Casual Leave, Sick Leave">
+              <button class="btn btn-primary" onclick="addLeaveType()"><i class="fas fa-plus"></i> Add</button>
+            </div>
+            <div id="leaveTypesList"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-user-cog"></i> Assign Leave Balance</div>
+          <div class="card-body">
+            <select id="selectUser" class="form-select mb-2"></select>
+            <select id="selectLeaveType" class="form-select mb-2"></select>
+            <input type="number" id="leaveTotal" class="form-control mb-2" placeholder="Total leaves (e.g., 12 or 12.5)" min="0" step="0.5">
+            <small class="text-muted d-block mb-2">You can enter decimal values like 0.5, 12.5, etc.</small>
+            <input type="number" id="leaveYear" class="form-control mb-2" value="2024" min="2020">
+            <button class="btn btn-success w-100" onclick="assignLeaveBalance()"><i class="fas fa-check"></i> Assign Balance</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-success text-white"><i class="fas fa-user-plus"></i> Bulk Add Employees</div>
+          <div class="card-body">
+            <textarea id="bulkEmployees" class="form-control mb-2" rows="6" placeholder="Enter employees (one per line):
+John Doe, john.doe
+Jane Smith, jane.smith"></textarea>
+            <small class="text-muted d-block mb-2">Format: FirstName LastName, LoginCode</small>
+            <button class="btn btn-success w-100" onclick="bulkAddEmployees()"><i class="fas fa-user-plus"></i> Add Employees</button>
+            <div id="bulkAddResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-primary text-white"><i class="fas fa-users"></i> Bulk Assign Leave Balance</div>
+          <div class="card-body">
+            <label class="form-label">Select Employees</label>
+            <select id="bulkSelectUsers" class="form-select mb-2" multiple size="5"></select>
+            <button class="btn btn-sm btn-outline-primary" onclick="selectAllUsers()"><i class="fas fa-check-double"></i> All</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearUserSelection()"><i class="fas fa-times"></i> Clear</button>
+            <select id="bulkLeaveType" class="form-select mt-2 mb-2"></select>
+            <input type="number" id="bulkLeaveTotal" class="form-control mb-2" placeholder="Total leaves" min="0" step="0.5">
+            <input type="number" id="bulkLeaveYear" class="form-control mb-2" value="2024" min="2020">
+            <button class="btn btn-primary w-100" onclick="bulkAssignLeaveBalance()"><i class="fas fa-users-cog"></i> Assign</button>
+            <div id="bulkResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-info text-white"><i class="fas fa-magic"></i> Assign Default Leaves</div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-4">
+                <label class="form-label">Casual</label>
+                <input type="number" id="defaultCasual" class="form-control" value="4" min="0" step="0.5">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Sick</label>
+                <input type="number" id="defaultSick" class="form-control" value="7" min="0" step="0.5">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Celebratory</label>
+                <input type="number" id="defaultCelebratory" class="form-control" value="0.5" min="0" step="0.5">
+              </div>
+            </div>
+            <input type="number" id="defaultYear" class="form-control mt-2 mb-2" value="2024" min="2020">
+            <button class="btn btn-info w-100" onclick="assignDefaultLeaves()"><i class="fas fa-magic"></i> Assign to All Users</button>
+            <small class="text-muted d-block mt-2">Assigns default leaves to all active users</small>
+            <div id="defaultResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-warning text-dark"><i class="fas fa-calendar-alt"></i> Rollover Leaves to New Year</div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <label class="form-label">From Year</label>
+                <input type="number" id="rolloverFromYear" class="form-control mb-2" value="2024" min="2020">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">To Year</label>
+                <input type="number" id="rolloverToYear" class="form-control mb-2" value="2025" min="2020">
+              </div>
+            </div>
+            <button class="btn btn-warning w-100" onclick="rolloverLeaves()"><i class="fas fa-sync-alt"></i> Rollover All Employees</button>
+            <small class="text-muted d-block mt-2">Copy leave balances to new year (used=0)</small>
+            <div id="rolloverResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee Panel -->
+  <div id="employee" class="tab-pane fade">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-wallet"></i> My Leave Balance</div>
+          <div class="card-body">
+            <select id="empSelectUser" class="form-select mb-3" onchange="loadEmployeeBalance()"></select>
+            <div id="employeeBalance"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-paper-plane"></i> Request Leave</div>
+          <div class="card-body">
+            <select id="reqUser" class="form-select mb-2"></select>
+            <select id="reqLeaveType" class="form-select mb-2"></select>
+            <input type="date" id="reqFromDate" class="form-control mb-2">
+            <input type="date" id="reqToDate" class="form-control mb-2">
+            <select id="reqDayType" class="form-select mb-2">
+              <option value="full">Full Day</option>
+              <option value="half">Half Day (0.5)</option>
+            </select>
+            <textarea id="reqReason" class="form-control mb-2" rows="2" placeholder="Reason for leave"></textarea>
+            <button class="btn btn-primary w-100" onclick="requestLeave()"><i class="fas fa-paper-plane"></i> Submit Request</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leave Requests -->
+  <div id="requests" class="tab-pane fade">
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-inbox"></i> All Leave Requests
+        <div class="btn-group float-end" role="group">
+          <button class="btn btn-sm btn-outline-primary" onclick="filterRequests('all')">All</button>
+          <button class="btn btn-sm btn-outline-warning" onclick="filterRequests('pending')">Pending</button>
+          <button class="btn btn-sm btn-outline-success" onclick="filterRequests('approved')">Approved</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="filterRequests('rejected')">Rejected</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="requestsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let leaveTypes = [];
+let users = [];
+let currentFilter = 'all';
+
+async function loadLeaveTypes() {
+  const res = await fetch('/api/leave-types');
+  const data = await res.json();
+  leaveTypes = data.leave_types || [];
+  
+  const list = document.getElementById('leaveTypesList');
+  list.innerHTML = leaveTypes.map(lt => `
+    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+      <span><i class="fas fa-tag"></i> ${lt.name}</span>
+      <button class="btn btn-sm btn-danger" onclick="deleteLeaveType(${lt.id})"><i class="fas fa-trash"></i></button>
+    </div>
+  `).join('');
+  
+  const selects = [document.getElementById('selectLeaveType'), document.getElementById('reqLeaveType'), document.getElementById('bulkLeaveType')];
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">Select Leave Type</option>' + 
+      leaveTypes.map(lt => `<option value="${lt.id}">${lt.name}</option>`).join('');
+  });
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/users');
+  const data = await res.json();
+  users = data.users || [];
+  
+  const selects = [
+    document.getElementById('selectUser'),
+    document.getElementById('empSelectUser'),
+    document.getElementById('reqUser')
+  ];
+  
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">Select Employee</option>' + 
+      users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+  });
+  
+  const bulkSelect = document.getElementById('bulkSelectUsers');
+  bulkSelect.innerHTML = users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+}
+
+async function addLeaveType() {
+  const name = document.getElementById('newLeaveType').value.trim();
+  if (!name) return alert('Enter leave type name');
+  
+  const res = await fetch('/api/leave-types', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById('newLeaveType').value = '';
+    loadLeaveTypes();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function deleteLeaveType(id) {
+  if (!confirm('Delete this leave type?')) return;
+  
+  await fetch(`/api/leave-types/${id}`, {method: 'DELETE'});
+  loadLeaveTypes();
+}
+
+async function assignLeaveBalance() {
+  const user_id = document.getElementById('selectUser').value;
+  const leave_type_id = document.getElementById('selectLeaveType').value;
+  const total = parseFloat(document.getElementById('leaveTotal').value);
+  const year = parseInt(document.getElementById('leaveYear').value);
+  
+  if (!user_id || !leave_type_id || !total) return alert('Fill all fields');
+  
+  const res = await fetch('/api/user-leave-balance', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id, leave_type_id, total, year})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave balance assigned successfully!');
+    document.getElementById('leaveTotal').value = '';
+  } else {
+    alert(data.error);
+  }
+}
+
+async function loadEmployeeBalance() {
+  const user_id = document.getElementById('empSelectUser').value;
+  if (!user_id) return;
+  
+  const res = await fetch(`/api/user-leave-balance?user_id=${user_id}`);
+  const data = await res.json();
+  
+  const div = document.getElementById('employeeBalance');
+  if (data.balances.length === 0) {
+    div.innerHTML = '<p class="text-muted">No leave balance assigned</p>';
+  } else {
+    div.innerHTML = data.balances.map(b => `
+      <div class="alert alert-info">
+        <strong>${b.leave_type_name}</strong><br>
+        Total: ${b.total} | Used: ${b.used} | <strong>Remaining: ${b.remaining}</strong>
+      </div>
+    `).join('');
+  }
+}
+
+async function requestLeave() {
+  const user_id = document.getElementById('reqUser').value;
+  const leave_type_id = document.getElementById('reqLeaveType').value;
+  const from_date = document.getElementById('reqFromDate').value;
+  const to_date = document.getElementById('reqToDate').value;
+  const day_type = document.getElementById('reqDayType').value;
+  const reason = document.getElementById('reqReason').value;
+  
+  if (!user_id || !leave_type_id || !from_date || !to_date) {
+    return alert('Fill all required fields');
+  }
+  
+  const res = await fetch('/api/leave-requests', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id, leave_type_id, from_date, to_date, day_type, reason})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave request submitted successfully!');
+    document.getElementById('reqFromDate').value = '';
+    document.getElementById('reqToDate').value = '';
+    document.getElementById('reqDayType').value = 'full';
+    document.getElementById('reqReason').value = '';
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function loadRequests() {
+  const url = currentFilter === 'all' ? '/api/leave-requests' : `/api/leave-requests?status=${currentFilter}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  
+  const tbody = document.getElementById('requestsTable');
+  tbody.innerHTML = data.requests.map(r => {
+    const statusBadge = {
+      pending: 'warning',
+      approved: 'success',
+      rejected: 'danger'
+    }[r.status];
+    
+    const actions = r.status === 'pending' ? `
+      <button class="btn btn-sm btn-success" onclick="approveRequest(${r.id})"><i class="fas fa-check"></i></button>
+      <button class="btn btn-sm btn-danger" onclick="rejectRequest(${r.id})"><i class="fas fa-times"></i></button>
+    ` : '-';
+    
+    return `
+      <tr>
+        <td>${r.user_name}</td>
+        <td>${r.leave_type_name}</td>
+        <td>${r.from_date}</td>
+        <td>${r.to_date}</td>
+        <td><span class="badge bg-primary">${r.days}</span></td>
+        <td>${r.reason || '-'}</td>
+        <td><span class="badge bg-${statusBadge}">${r.status}</span></td>
+        <td>${actions}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function approveRequest(id) {
+  if (!confirm('Approve this leave request?')) return;
+  
+  const res = await fetch(`/api/leave-requests/${id}/approve`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({approved_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave request approved!');
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function rejectRequest(id) {
+  if (!confirm('Reject this leave request?')) return;
+  
+  const res = await fetch(`/api/leave-requests/${id}/reject`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({approved_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave request rejected!');
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+function filterRequests(status) {
+  currentFilter = status;
+  loadRequests();
+}
+
+function selectAllUsers() {
+  const select = document.getElementById('bulkSelectUsers');
+  for (let i = 0; i < select.options.length; i++) {
+    select.options[i].selected = true;
+  }
+}
+
+function clearUserSelection() {
+  const select = document.getElementById('bulkSelectUsers');
+  for (let i = 0; i < select.options.length; i++) {
+    select.options[i].selected = false;
+  }
+}
+
+async function bulkAddEmployees() {
+  const text = document.getElementById('bulkEmployees').value.trim();
+  if (!text) return alert('Enter employee data');
+  
+  const lines = text.split('\n').filter(l => l.trim());
+  const employees = [];
+  
+  for (const line of lines) {
+    const parts = line.split(',').map(p => p.trim());
+    if (parts.length !== 2) continue;
+    const [name, login] = parts;
+    const nameParts = name.split(' ');
+    employees.push({
+      firstName: nameParts[0],
+      lastName: nameParts.slice(1).join(' ') || nameParts[0],
+      login: login
+    });
+  }
+  
+  if (employees.length === 0) return alert('No valid employees found');
+  
+  const resultDiv = document.getElementById('bulkAddResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Adding...';
+  
+  const res = await fetch('/api/users/bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({employees})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Added ${data.count} employees!</div>`;
+    document.getElementById('bulkEmployees').value = '';
+    loadUsers();
+    setTimeout(() => resultDiv.innerHTML = '', 3000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function bulkAssignLeaveBalance() {
+  const select = document.getElementById('bulkSelectUsers');
+  const user_ids = Array.from(select.selectedOptions).map(opt => parseInt(opt.value));
+  const leave_type_id = parseInt(document.getElementById('bulkLeaveType').value);
+  const total = parseFloat(document.getElementById('bulkLeaveTotal').value);
+  const year = parseInt(document.getElementById('bulkLeaveYear').value);
+  
+  if (user_ids.length === 0) return alert('Select at least one employee');
+  if (!leave_type_id || !total) return alert('Fill all fields');
+  
+  const resultDiv = document.getElementById('bulkResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Processing...';
+  
+  const res = await fetch('/api/user-leave-balance/bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_ids, leave_type_id, total, year})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Assigned to ${data.count} employees!</div>`;
+    document.getElementById('bulkLeaveTotal').value = '';
+    clearUserSelection();
+    setTimeout(() => resultDiv.innerHTML = '', 3000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function assignDefaultLeaves() {
+  const casual = parseFloat(document.getElementById('defaultCasual').value);
+  const sick = parseFloat(document.getElementById('defaultSick').value);
+  const celebratory = parseFloat(document.getElementById('defaultCelebratory').value);
+  const year = parseInt(document.getElementById('defaultYear').value);
+  
+  if (!confirm(`Assign default leaves (Casual: ${casual}, Sick: ${sick}, Celebratory: ${celebratory}) to all users for ${year}?`)) return;
+  
+  const resultDiv = document.getElementById('defaultResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Assigning...';
+  
+  const res = await fetch('/api/user-leave-balance/default', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({year, defaults: {casual, sick, celebratory}})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Assigned default leaves to ${data.users} users!</div>`;
+    setTimeout(() => resultDiv.innerHTML = '', 5000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function rolloverLeaves() {
+  const from_year = parseInt(document.getElementById('rolloverFromYear').value);
+  const to_year = parseInt(document.getElementById('rolloverToYear').value);
+  
+  if (!from_year || !to_year) return alert('Enter both years');
+  if (to_year <= from_year) return alert('To year must be greater than from year');
+  
+  if (!confirm(`Rollover all leave balances from ${from_year} to ${to_year}?`)) return;
+  
+  const user_ids = users.map(u => u.user_id);
+  
+  const resultDiv = document.getElementById('rolloverResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Rolling over...';
+  
+  const res = await fetch('/api/user-leave-balance/rollover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({from_year, to_year, user_ids})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Rolled over ${data.count} leave balances to ${to_year}!</div>`;
+    setTimeout(() => resultDiv.innerHTML = '', 5000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadLeaveTypes();
+  loadUsers();
+  loadRequests();
+  const currentYear = new Date().getFullYear();
+  document.getElementById('leaveYear').value = currentYear;
+  document.getElementById('bulkLeaveYear').value = currentYear;
+  document.getElementById('defaultYear').value = currentYear;
+  document.getElementById('rolloverFromYear').value = currentYear;
+  document.getElementById('rolloverToYear').value = currentYear + 1;
+});
+</script>
+{% endblock %}
