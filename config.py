@@ -29,12 +29,11 @@ class Config:
     # ============================================
     # DATABASE CONFIGURATION
     # ============================================
-    # XAMPP MySQL Configuration for MTPL Database
-    # Set DATABASE_URL environment variable or update the connection string below
-    # Note: Special characters in password must be URL-encoded (@ = %40, # = %23, etc.)
+    # Server MySQL Configuration for MTPL Database
+    # Update this to match your server credentials from backend .env
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://root:YOUR_PASSWORD@localhost:3306/mtpl_website"
+        "mysql+pymysql://admin:db_user_b9JS&eI#@192.168.31.229:3306/mtpl_website"
     )
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
