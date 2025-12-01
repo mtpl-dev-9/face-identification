@@ -283,6 +283,51 @@ def create_app():
         persons = Person.query.order_by(Person.biometricCreatedAt.desc()).all()
         return render_template("persons.html", persons=persons)
 
+    @app.route("/api/persons", methods=["GET"])
+    def api_get_persons():
+        persons = Person.query.filter_by(biometricIsActive=True).order_by(Person.biometricCreatedAt.desc()).all()
+        return jsonify({"success": True, "persons": [p.to_dict() for p in persons]})
+
+    @app.route("/api/users", methods=["GET"])
+    def api_get_users():
+        users = User.query.filter_by(userIsActive='1').all()
+        return jsonify({"success": True, "users": [{
+            "user_id": u.userId,
+            "name": f"{u.userFirstName} {u.userLastName}".strip(),
+            "employee_code": u.userLogin or str(u.userId)
+        } for u in users]})
+
+    @app.route("/api/users/bulk", methods=["POST"])
+    def api_bulk_add_users():
+        try:
+            data = request.get_json() or {}
+            employees = data.get('employees', [])
+            
+            if not employees:
+                return jsonify({"success": False, "error": "No employees provided"}), 400
+            
+            added = []
+            for emp in employees:
+                firstName = emp.get('firstName', '').strip()
+                lastName = emp.get('lastName', '').strip()
+                login = emp.get('login', '').strip()
+                
+                if not firstName or not login:
+                    continue
+                
+                if User.query.filter_by(userLogin=login).first():
+                    continue
+                
+                user = User(userFirstName=firstName, userLastName=lastName, userLogin=login, userIsActive='1')
+                db.session.add(user)
+                added.append(user)
+            
+            db.session.commit()
+            return jsonify({"success": True, "count": len(added)})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
     @app.route("/api/persons/<int:person_id>", methods=["DELETE", "POST"])
     def api_delete_person(person_id):
         try:
@@ -847,6 +892,586 @@ def create_app():
         db.session.commit()
         
         return jsonify({"success": True})
+
+    # --- Leave Management ---
+    @app.route("/leave-management")
+    def leave_management():
+        return render_template("leave_management.html")
+
+    @app.route("/api/leave-types", methods=["GET"])
+    def api_get_leave_types():
+        """
+        Get All Leave Types
+        ---
+        tags:
+          - Leave Management
+        responses:
+          200:
+            description: List of active leave types
+        """
+        from models import LeaveType
+        leave_types = LeaveType.query.filter_by(leaveTypeIsActive=True).all()
+        return jsonify({"success": True, "leave_types": [lt.to_dict() for lt in leave_types]})
+
+    @app.route("/api/leave-types", methods=["POST"])
+    def api_add_leave_type():
+        """
+        Create Leave Type
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+        responses:
+          200:
+            description: Leave type created
+        """
+        from models import LeaveType
+        data = request.get_json() or {}
+        name = data.get('name', '').strip()
+        
+        if not name:
+            return jsonify({"success": False, "error": "Leave type name required"}), 400
+        
+        if LeaveType.query.filter_by(leaveTypeName=name).first():
+            return jsonify({"success": False, "error": "Leave type already exists"}), 400
+        
+        leave_type = LeaveType(leaveTypeName=name)
+        db.session.add(leave_type)
+        db.session.commit()
+        
+        return jsonify({"success": True, "leave_type": leave_type.to_dict()})
+
+    @app.route("/api/leave-types/<int:leave_type_id>", methods=["DELETE"])
+    def api_delete_leave_type(leave_type_id):
+        """
+        Delete Leave Type
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: leave_type_id
+            in: path
+            type: integer
+            required: true
+        responses:
+          200:
+            description: Leave type deleted
+        """
+        from models import LeaveType
+        leave_type = LeaveType.query.get(leave_type_id)
+        if not leave_type:
+            return jsonify({"success": False, "error": "Leave type not found"}), 404
+        
+        leave_type.leaveTypeIsActive = False
+        db.session.commit()
+        
+        return jsonify({"success": True})
+
+    @app.route("/api/user-leave-balance", methods=["GET"])
+    def api_get_user_leave_balance():
+        """
+        Get User Leave Balance
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+            required: true
+          - name: year
+            in: query
+            type: integer
+        responses:
+          200:
+            description: User leave balances
+        """
+        from models import UserLeaveBalance
+        user_id = request.args.get('user_id', type=int)
+        year = request.args.get('year', get_ist_now().year, type=int)
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "user_id required"}), 400
+        
+        balances = UserLeaveBalance.query.filter_by(balanceUserId=user_id, balanceYear=year).all()
+        return jsonify({"success": True, "balances": [b.to_dict() for b in balances]})
+
+    @app.route("/api/user-leave-balance/rollover", methods=["POST"])
+    def api_rollover_leave_balance():
+        """
+        Rollover Leave Balance to New Year
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                from_year:
+                  type: integer
+                to_year:
+                  type: integer
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+        responses:
+          200:
+            description: Leave balances rolled over
+        """
+        from models import UserLeaveBalance
+        data = request.get_json() or {}
+        from_year = data.get('from_year')
+        to_year = data.get('to_year')
+        user_ids = data.get('user_ids', [])
+        
+        if not from_year or not to_year:
+            return jsonify({"success": False, "error": "from_year and to_year required"}), 400
+        
+        if not user_ids:
+            return jsonify({"success": False, "error": "user_ids required"}), 400
+        
+        created = []
+        for user_id in user_ids:
+            old_balances = UserLeaveBalance.query.filter_by(
+                balanceUserId=user_id,
+                balanceYear=from_year
+            ).all()
+            
+            for old_bal in old_balances:
+                existing = UserLeaveBalance.query.filter_by(
+                    balanceUserId=user_id,
+                    balanceLeaveTypeId=old_bal.balanceLeaveTypeId,
+                    balanceYear=to_year
+                ).first()
+                
+                if not existing:
+                    new_bal = UserLeaveBalance(
+                        balanceUserId=user_id,
+                        balanceLeaveTypeId=old_bal.balanceLeaveTypeId,
+                        balanceTotal=old_bal.balanceTotal,
+                        balanceUsed=0,
+                        balanceYear=to_year
+                    )
+                    db.session.add(new_bal)
+                    created.append(new_bal)
+        
+        db.session.commit()
+        return jsonify({"success": True, "count": len(created)})
+
+    @app.route("/api/user-leave-balance/default", methods=["POST"])
+    def api_set_default_leave_balance():
+        """
+        Assign Default Leave Balance to All Users
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                year:
+                  type: integer
+                defaults:
+                  type: object
+                  properties:
+                    casual:
+                      type: number
+                    sick:
+                      type: number
+                    celebratory:
+                      type: number
+        responses:
+          200:
+            description: Default leaves assigned
+        """
+        from models import UserLeaveBalance, LeaveType
+        data = request.get_json() or {}
+        year = data.get('year', get_ist_now().year)
+        defaults = data.get('defaults', {'casual': 4, 'sick': 7, 'celebratory': 0.5})
+        
+        users = User.query.filter_by(userIsActive='1').all()
+        if not users:
+            return jsonify({"success": False, "error": "No users found"}), 404
+        
+        leave_types = {}
+        for name in ['Casual Leave', 'Sick Leave', 'Celebratory Leave']:
+            lt = LeaveType.query.filter_by(leaveTypeName=name).first()
+            if not lt:
+                lt = LeaveType(leaveTypeName=name)
+                db.session.add(lt)
+                db.session.flush()
+            leave_types[name] = lt
+        
+        mapping = {
+            'Casual Leave': defaults.get('casual', 4),
+            'Sick Leave': defaults.get('sick', 7),
+            'Celebratory Leave': defaults.get('celebratory', 0.5)
+        }
+        
+        count = 0
+        for user in users:
+            for leave_name, total in mapping.items():
+                leave_type = leave_types[leave_name]
+                balance = UserLeaveBalance.query.filter_by(
+                    balanceUserId=user.userId,
+                    balanceLeaveTypeId=leave_type.leaveTypeId,
+                    balanceYear=year
+                ).first()
+                
+                if balance:
+                    balance.balanceTotal = total
+                else:
+                    balance = UserLeaveBalance(
+                        balanceUserId=user.userId,
+                        balanceLeaveTypeId=leave_type.leaveTypeId,
+                        balanceTotal=total,
+                        balanceYear=year
+                    )
+                    db.session.add(balance)
+                count += 1
+        
+        db.session.commit()
+        return jsonify({"success": True, "count": count, "users": len(users)})
+
+    @app.route("/api/user-leave-balance/bulk", methods=["POST"])
+    def api_set_bulk_user_leave_balance():
+        """
+        Assign Leave Balance to Multiple Users
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+                leave_type_id:
+                  type: integer
+                total:
+                  type: number
+                year:
+                  type: integer
+        responses:
+          200:
+            description: Leave balance assigned to multiple users
+        """
+        from models import UserLeaveBalance
+        data = request.get_json() or {}
+        user_ids = data.get('user_ids', [])
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        
+        if not user_ids or not leave_type_id:
+            return jsonify({"success": False, "error": "user_ids and leave_type_id required"}), 400
+        
+        results = []
+        for user_id in user_ids:
+            balance = UserLeaveBalance.query.filter_by(
+                balanceUserId=user_id,
+                balanceLeaveTypeId=leave_type_id,
+                balanceYear=year
+            ).first()
+            
+            if balance:
+                balance.balanceTotal = total
+            else:
+                balance = UserLeaveBalance(
+                    balanceUserId=user_id,
+                    balanceLeaveTypeId=leave_type_id,
+                    balanceTotal=total,
+                    balanceYear=year
+                )
+                db.session.add(balance)
+            results.append(balance)
+        
+        db.session.commit()
+        return jsonify({"success": True, "count": len(results), "balances": [b.to_dict() for b in results]})
+
+    @app.route("/api/user-leave-balance", methods=["POST"])
+    def api_set_user_leave_balance():
+        """
+        Assign Leave Balance
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                leave_type_id:
+                  type: integer
+                total:
+                  type: number
+                year:
+                  type: integer
+        responses:
+          200:
+            description: Leave balance assigned
+        """
+        from models import UserLeaveBalance
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        
+        if not user_id or not leave_type_id:
+            return jsonify({"success": False, "error": "user_id and leave_type_id required"}), 400
+        
+        balance = UserLeaveBalance.query.filter_by(
+            balanceUserId=user_id,
+            balanceLeaveTypeId=leave_type_id,
+            balanceYear=year
+        ).first()
+        
+        if balance:
+            balance.balanceTotal = total
+        else:
+            balance = UserLeaveBalance(
+                balanceUserId=user_id,
+                balanceLeaveTypeId=leave_type_id,
+                balanceTotal=total,
+                balanceYear=year
+            )
+            db.session.add(balance)
+        
+        db.session.commit()
+        return jsonify({"success": True, "balance": balance.to_dict()})
+
+    @app.route("/api/leave-requests", methods=["GET"])
+    def api_get_leave_requests():
+        """
+        Get Leave Requests
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+          - name: status
+            in: query
+            type: string
+            enum: [pending, approved, rejected]
+        responses:
+          200:
+            description: List of leave requests
+        """
+        from models import LeaveRequest
+        user_id = request.args.get('user_id', type=int)
+        status = request.args.get('status')
+        
+        query = LeaveRequest.query
+        if user_id:
+            query = query.filter_by(leaveRequestUserId=user_id)
+        if status:
+            query = query.filter_by(leaveRequestStatus=status)
+        
+        requests = query.order_by(LeaveRequest.leaveRequestCreatedAt.desc()).all()
+        return jsonify({"success": True, "requests": [r.to_dict() for r in requests]})
+
+    @app.route("/api/leave-requests", methods=["POST"])
+    def api_create_leave_request():
+        """
+        Create Leave Request
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                leave_type_id:
+                  type: integer
+                from_date:
+                  type: string
+                  format: date
+                to_date:
+                  type: string
+                  format: date
+                day_type:
+                  type: string
+                  enum: [full, half]
+                reason:
+                  type: string
+        responses:
+          200:
+            description: Leave request created
+        """
+        from models import LeaveRequest, UserLeaveBalance
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        leave_type_id = data.get('leave_type_id')
+        from_date_str = data.get('from_date')
+        to_date_str = data.get('to_date')
+        day_type = data.get('day_type', 'full')
+        reason = data.get('reason', '')
+        
+        if not all([user_id, leave_type_id, from_date_str, to_date_str]):
+            return jsonify({"success": False, "error": "All fields required"}), 400
+        
+        try:
+            from_date = dt.strptime(from_date_str, '%Y-%m-%d').date()
+            to_date = dt.strptime(to_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid date format"}), 400
+        
+        if to_date < from_date:
+            return jsonify({"success": False, "error": "To date must be after from date"}), 400
+        
+        # Calculate days based on day_type
+        base_days = (to_date - from_date).days + 1
+        if day_type == 'half' and base_days == 1:
+            days = 0.5
+        else:
+            days = float(base_days)
+        year = from_date.year
+        
+        balance = UserLeaveBalance.query.filter_by(
+            balanceUserId=user_id,
+            balanceLeaveTypeId=leave_type_id,
+            balanceYear=year
+        ).first()
+        
+        if not balance or balance.remaining < days:
+            return jsonify({"success": False, "error": "Insufficient leave balance"}), 400
+        
+        leave_request = LeaveRequest(
+            leaveRequestUserId=user_id,
+            leaveRequestLeaveTypeId=leave_type_id,
+            leaveRequestFromDate=from_date,
+            leaveRequestToDate=to_date,
+            leaveRequestDays=days,
+            leaveRequestReason=reason
+        )
+        db.session.add(leave_request)
+        db.session.commit()
+        
+        return jsonify({"success": True, "request": leave_request.to_dict()})
+
+    @app.route("/api/leave-requests/<int:request_id>/approve", methods=["POST"])
+    def api_approve_leave_request(request_id):
+        """
+        Approve Leave Request
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: request_id
+            in: path
+            type: integer
+            required: true
+          - name: body
+            in: body
+            schema:
+              type: object
+              properties:
+                approved_by:
+                  type: integer
+        responses:
+          200:
+            description: Leave request approved
+        """
+        from models import LeaveRequest, UserLeaveBalance
+        data = request.get_json() or {}
+        approved_by = data.get('approved_by')
+        
+        leave_request = LeaveRequest.query.get(request_id)
+        if not leave_request:
+            return jsonify({"success": False, "error": "Request not found"}), 404
+        
+        if leave_request.leaveRequestStatus != 'pending':
+            return jsonify({"success": False, "error": "Request already processed"}), 400
+        
+        balance = UserLeaveBalance.query.filter_by(
+            balanceUserId=leave_request.leaveRequestUserId,
+            balanceLeaveTypeId=leave_request.leaveRequestLeaveTypeId,
+            balanceYear=leave_request.leaveRequestFromDate.year
+        ).first()
+        
+        if not balance or balance.remaining < leave_request.leaveRequestDays:
+            return jsonify({"success": False, "error": "Insufficient leave balance"}), 400
+        
+        leave_request.leaveRequestStatus = 'approved'
+        leave_request.leaveRequestApprovedBy = approved_by
+        leave_request.leaveRequestApprovedAt = get_ist_now()
+        balance.balanceUsed += leave_request.leaveRequestDays
+        
+        db.session.commit()
+        return jsonify({"success": True, "request": leave_request.to_dict()})
+
+    @app.route("/api/leave-requests/<int:request_id>/reject", methods=["POST"])
+    def api_reject_leave_request(request_id):
+        """
+        Reject Leave Request
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: request_id
+            in: path
+            type: integer
+            required: true
+          - name: body
+            in: body
+            schema:
+              type: object
+              properties:
+                approved_by:
+                  type: integer
+        responses:
+          200:
+            description: Leave request rejected
+        """
+        from models import LeaveRequest
+        data = request.get_json() or {}
+        approved_by = data.get('approved_by')
+        
+        leave_request = LeaveRequest.query.get(request_id)
+        if not leave_request:
+            return jsonify({"success": False, "error": "Request not found"}), 404
+        
+        if leave_request.leaveRequestStatus != 'pending':
+            return jsonify({"success": False, "error": "Request already processed"}), 400
+        
+        leave_request.leaveRequestStatus = 'rejected'
+        leave_request.leaveRequestApprovedBy = approved_by
+        leave_request.leaveRequestApprovedAt = get_ist_now()
+        
+        db.session.commit()
+        return jsonify({"success": True, "request": leave_request.to_dict()})
 
     return app
 
