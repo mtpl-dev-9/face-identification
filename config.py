@@ -30,10 +30,11 @@ class Config:
     # DATABASE CONFIGURATION
     # ============================================
     # XAMPP MySQL Configuration for MTPL Database
-    # Note: @ symbol in password is URL-encoded as %40
+    # Set DATABASE_URL environment variable or update the connection string below
+    # Note: Special characters in password must be URL-encoded (@ = %40, # = %23, etc.)
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://root:Krunal%4018@localhost:3306/mtpl_website"
+        "mysql+pymysql://root:YOUR_PASSWORD@localhost:3306/mtpl_website"
     )
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
