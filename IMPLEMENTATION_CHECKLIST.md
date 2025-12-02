@@ -1,388 +1,366 @@
-# Leave Management System - Implementation Checklist
+# Leave Allotment System - Implementation Checklist
 
-## ✅ Requirements Verification
+## ✅ Pre-Implementation
 
-### 1. Dynamic Leave Types ✅
-- [x] Admin can create leave types (Casual, Sick, Celebratory, etc.)
-- [x] No hardcoded leave types
-- [x] Can add unlimited leave types
-- [x] Can activate/deactivate leave types
-- [x] Leave types stored in database
+- [ ] Backup current database
+  ```bash
+  mysqldump -u admin -p mtpl_website > backup_$(date +%Y%m%d).sql
+  ```
 
-**Proof:** `mtpl_leave_types` table + `/api/leave-types` API
+- [ ] Verify Python dependencies installed
+  ```bash
+  pip list | grep -E "flask|sqlalchemy|pymysql"
+  ```
 
----
+- [ ] Check database connection in `config.py`
+  ```python
+  SQLALCHEMY_DATABASE_URI = "mysql+pymysql://admin:password@host:3306/mtpl_website"
+  ```
 
-### 2. Admin Controls ✅
-- [x] Admin can create leave types
-- [x] Admin can assign leave balance to employees
-- [x] Admin can set how much leave each person gets
-- [x] Admin can approve leave requests
-- [x] Admin can reject leave requests
-- [x] All operations via web UI (no code changes needed)
+## ✅ Database Setup
 
-**Proof:** Admin Panel tab in `/leave-management` page
+- [ ] Create `mtpl_leave_allotment` table
+  ```bash
+  mysql -u admin -p mtpl_website < leave_allotment_schema.sql
+  ```
 
----
+- [ ] Verify table created
+  ```sql
+  SHOW TABLES LIKE 'mtpl_leave_allotment';
+  DESCRIBE mtpl_leave_allotment;
+  ```
 
-### 3. Leave Balance Management ✅
-- [x] Track total leaves assigned
-- [x] Track used leaves
-- [x] Calculate remaining leaves automatically
-- [x] Year-wise tracking (2024, 2025, etc.)
-- [x] Different balances for different leave types
-- [x] Different balances for different employees
+- [ ] Check foreign key constraints
+  ```sql
+  SHOW CREATE TABLE mtpl_leave_allotment;
+  ```
 
-**Proof:** `mtpl_user_leave_balance` table + `/api/user-leave-balance` API
+## ✅ Code Deployment
 
----
+- [ ] Updated files in place:
+  - [x] `app.py` - New API endpoints added
+  - [x] `templates/leave_management.html` - Frontend updated
+  - [x] `models.py` - LeaveAllotment model exists
+  - [x] `README.md` - Documentation updated
 
-### 4. Leave Request System ✅
-- [x] Employees can request leaves
-- [x] Select leave type
-- [x] Select date range (from/to)
-- [x] Automatic days calculation
-- [x] Add reason for leave
-- [x] Validate against available balance
-- [x] Track request status (pending/approved/rejected)
+- [ ] New files created:
+  - [x] `leave_allotment_schema.sql`
+  - [x] `init_leave_allotment.py`
+  - [x] `test_leave_allotment.py`
+  - [x] `LEAVE_ALLOTMENT_GUIDE.md`
+  - [x] `LEAVE_ALLOTMENT_CHANGES.md`
+  - [x] `QUICK_START_LEAVE_ALLOTMENT.md`
+  - [x] `LEAVE_ALLOTMENT_DIAGRAM.md`
+  - [x] `IMPLEMENTATION_CHECKLIST.md`
 
-**Proof:** Employee Panel tab + `/api/leave-requests` API
+## ✅ Initialization
 
----
+- [ ] Run initialization script
+  ```bash
+  python init_leave_allotment.py
+  ```
 
-### 5. Approval Workflow ✅
-- [x] Requests start as "pending"
-- [x] Admin can approve requests
-- [x] Admin can reject requests
-- [x] Balance automatically deducted on approval
-- [x] Track who approved
-- [x] Track when approved
-- [x] Cannot approve if insufficient balance
+- [ ] Verify leave types created
+  ```sql
+  SELECT * FROM mtpl_leave_types;
+  ```
+  Expected: Casual Leave, Sick Leave, Celebratory Leave
 
-**Proof:** Leave Requests tab + `/api/leave-requests/{id}/approve` API
+- [ ] Check active users count
+  ```sql
+  SELECT COUNT(*) FROM mtpl_users WHERE userIsActive = '1';
+  ```
 
----
+## ✅ Testing
 
-### 6. Calculation & Validation ✅
-- [x] Calculate leave days: (to_date - from_date) + 1
-- [x] Validate balance before request creation
-- [x] Validate balance before approval
-- [x] Prevent over-allocation
-- [x] Show remaining balance to employees
+- [ ] Run test script
+  ```bash
+  python test_leave_allotment.py
+  ```
 
-**Proof:** Business logic in `app.py` routes
+- [ ] Start application
+  ```bash
+  python app.py
+  ```
 
----
+- [ ] Access leave management page
+  ```
+  http://127.0.0.1:5000/leave-management
+  ```
 
-## 📊 Database Tables Created
+- [ ] Test API endpoints:
 
-### Table 1: mtpl_leave_types ✅
+  **Get Leave Types:**
+  ```bash
+  curl http://127.0.0.1:5000/api/leave-types
+  ```
+
+  **Get Allotments (should be empty initially):**
+  ```bash
+  curl http://127.0.0.1:5000/api/leave-allotments?user_id=1&year=2024
+  ```
+
+## ✅ Functional Testing
+
+### Test 1: Assign Leave to Single User
+
+- [ ] Go to Admin Panel → Assign Leave Balance
+- [ ] Select a user
+- [ ] Select "Casual Leave"
+- [ ] Enter 4
+- [ ] Enter current year
+- [ ] Click "Assign Balance"
+- [ ] Verify success message
+- [ ] Check database:
+  ```sql
+  SELECT * FROM mtpl_leave_allotment WHERE allotmentUserId = 1;
+  ```
+
+### Test 2: View Employee Balance
+
+- [ ] Go to Employee Panel
+- [ ] Select the same user
+- [ ] Verify balance shows:
+  ```
+  Casual Leave
+  Total: 4 | Used: 0 | Remaining: 4
+  ```
+
+### Test 3: Bulk Assign
+
+- [ ] Go to Admin Panel → Bulk Assign Leave Balance
+- [ ] Select multiple users (Ctrl+Click)
+- [ ] Select "Sick Leave"
+- [ ] Enter 7
+- [ ] Click "Assign"
+- [ ] Verify success message with count
+- [ ] Check database:
+  ```sql
+  SELECT COUNT(*) FROM mtpl_leave_allotment WHERE allotmentLeaveTypeId = 2;
+  ```
+
+### Test 4: Assign Default Leaves
+
+- [ ] Go to Admin Panel → Assign Default Leaves
+- [ ] Set Casual: 4, Sick: 7, Celebratory: 0.5
+- [ ] Enter current year
+- [ ] Click "Assign to All Users"
+- [ ] Verify success message
+- [ ] Check database:
+  ```sql
+  SELECT 
+    allotmentYear,
+    COUNT(*) as total_records,
+    COUNT(DISTINCT allotmentUserId) as unique_users
+  FROM mtpl_leave_allotment
+  GROUP BY allotmentYear;
+  ```
+  Expected: 3 records per user
+
+### Test 5: API Testing
+
+- [ ] Test GET endpoint:
+  ```bash
+  curl http://127.0.0.1:5000/api/leave-allotments?user_id=1&year=2024
+  ```
+
+- [ ] Test POST endpoint:
+  ```bash
+  curl -X POST http://127.0.0.1:5000/api/leave-allotments \
+    -H "Content-Type: application/json" \
+    -d '{"user_id":1,"leave_type_id":1,"total":4,"year":2024,"assigned_by":1}'
+  ```
+
+- [ ] Test Bulk POST:
+  ```bash
+  curl -X POST http://127.0.0.1:5000/api/leave-allotments/bulk \
+    -H "Content-Type: application/json" \
+    -d '{"user_ids":[1,2],"leave_type_id":1,"total":4,"year":2024,"assigned_by":1}'
+  ```
+
+- [ ] Test Default POST:
+  ```bash
+  curl -X POST http://127.0.0.1:5000/api/leave-allotments/default \
+    -H "Content-Type: application/json" \
+    -d '{"year":2024,"defaults":{"casual":4,"sick":7,"celebratory":0.5},"assigned_by":1}'
+  ```
+
+## ✅ Data Verification
+
+- [ ] Check total allotments:
+  ```sql
+  SELECT COUNT(*) FROM mtpl_leave_allotment;
+  ```
+
+- [ ] Check allotments per user:
+  ```sql
+  SELECT 
+    allotmentUserId,
+    COUNT(*) as leave_types_assigned
+  FROM mtpl_leave_allotment
+  WHERE allotmentYear = 2024
+  GROUP BY allotmentUserId;
+  ```
+
+- [ ] View sample data:
+  ```sql
+  SELECT 
+    u.userFirstName,
+    u.userLastName,
+    lt.leaveTypeName,
+    a.allotmentTotal,
+    a.allotmentYear
+  FROM mtpl_leave_allotment a
+  JOIN mtpl_users u ON a.allotmentUserId = u.userId
+  JOIN mtpl_leave_types lt ON a.allotmentLeaveTypeId = lt.leaveTypeId
+  LIMIT 10;
+  ```
+
+- [ ] Check for duplicates (should be none):
+  ```sql
+  SELECT 
+    allotmentUserId,
+    allotmentLeaveTypeId,
+    allotmentYear,
+    COUNT(*) as count
+  FROM mtpl_leave_allotment
+  GROUP BY allotmentUserId, allotmentLeaveTypeId, allotmentYear
+  HAVING count > 1;
+  ```
+
+## ✅ Edge Cases Testing
+
+- [ ] Test decimal values (0.5, 12.5)
+- [ ] Test update existing allotment
+- [ ] Test with inactive users
+- [ ] Test with non-existent user_id
+- [ ] Test with invalid leave_type_id
+- [ ] Test with past year
+- [ ] Test with future year
+
+## ✅ Performance Testing
+
+- [ ] Test with 100+ users
+- [ ] Test bulk assign to all users
+- [ ] Check query performance:
+  ```sql
+  EXPLAIN SELECT * FROM mtpl_leave_allotment 
+  WHERE allotmentUserId = 1 AND allotmentYear = 2024;
+  ```
+
+- [ ] Verify indexes exist:
+  ```sql
+  SHOW INDEX FROM mtpl_leave_allotment;
+  ```
+
+## ✅ Documentation Review
+
+- [ ] Read `LEAVE_ALLOTMENT_GUIDE.md`
+- [ ] Review `LEAVE_ALLOTMENT_CHANGES.md`
+- [ ] Check `QUICK_START_LEAVE_ALLOTMENT.md`
+- [ ] View `LEAVE_ALLOTMENT_DIAGRAM.md`
+- [ ] Verify `README.md` updated
+
+## ✅ User Acceptance Testing
+
+- [ ] Admin can assign leaves
+- [ ] Admin can bulk assign leaves
+- [ ] Admin can assign default leaves
+- [ ] Employee can view balance
+- [ ] Balance displays correctly
+- [ ] Data persists in database
+- [ ] UI is responsive
+- [ ] No errors in console
+
+## ✅ Production Readiness
+
+- [ ] Database backup completed
+- [ ] All tests passed
+- [ ] Documentation complete
+- [ ] API endpoints working
+- [ ] Frontend functional
+- [ ] No console errors
+- [ ] Performance acceptable
+- [ ] Security reviewed
+
+## ✅ Deployment
+
+- [ ] Deploy to production server
+- [ ] Run initialization on production
+- [ ] Verify production database connection
+- [ ] Test production endpoints
+- [ ] Monitor logs for errors
+- [ ] Inform users of new feature
+
+## ✅ Post-Deployment
+
+- [ ] Monitor application logs
+- [ ] Check database growth
+- [ ] Gather user feedback
+- [ ] Document any issues
+- [ ] Plan for improvements
+
+## 🎯 Success Criteria
+
+All of the following should be true:
+
+✅ Table `mtpl_leave_allotment` exists and has data
+✅ API endpoints return correct responses
+✅ Frontend displays leave balances correctly
+✅ Admin can assign leaves successfully
+✅ Employees can view their balances
+✅ Data persists correctly in database
+✅ No errors in application logs
+✅ Documentation is complete and accurate
+
+## 📊 Metrics to Track
+
+- Total allotments created
+- Number of users with allotments
+- Average allotments per user
+- API response times
+- Database query performance
+- User adoption rate
+
+## 🔍 Monitoring Queries
+
+**Daily Check:**
 ```sql
-CREATE TABLE mtpl_leave_types (
-  leaveTypeId INT PRIMARY KEY AUTO_INCREMENT,
-  leaveTypeName VARCHAR(50) UNIQUE NOT NULL,
-  leaveTypeIsActive BOOLEAN DEFAULT TRUE,
-  leaveTypeCreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
-**Status:** ✅ Schema created in `leave_management_schema.sql`
+-- Total allotments
+SELECT COUNT(*) FROM mtpl_leave_allotment;
 
-### Table 2: mtpl_user_leave_balance ✅
+-- Users with allotments
+SELECT COUNT(DISTINCT allotmentUserId) FROM mtpl_leave_allotment;
+
+-- Recent assignments
+SELECT * FROM mtpl_leave_allotment 
+ORDER BY allotmentAssignedAt DESC 
+LIMIT 10;
+```
+
+**Weekly Check:**
 ```sql
-CREATE TABLE mtpl_user_leave_balance (
-  balanceId INT PRIMARY KEY AUTO_INCREMENT,
-  balanceUserId INT NOT NULL,
-  balanceLeaveTypeId INT NOT NULL,
-  balanceTotal INT DEFAULT 0,
-  balanceUsed INT DEFAULT 0,
-  balanceYear INT NOT NULL,
-  balanceUpdatedAt DATETIME,
-  FOREIGN KEY (balanceLeaveTypeId) REFERENCES mtpl_leave_types(leaveTypeId)
-);
-```
-**Status:** ✅ Schema created in `leave_management_schema.sql`
+-- Allotments by year
+SELECT allotmentYear, COUNT(*) 
+FROM mtpl_leave_allotment 
+GROUP BY allotmentYear;
 
-### Table 3: mtpl_leave_requests ✅
-```sql
-CREATE TABLE mtpl_leave_requests (
-  leaveRequestId INT PRIMARY KEY AUTO_INCREMENT,
-  leaveRequestUserId INT NOT NULL,
-  leaveRequestLeaveTypeId INT NOT NULL,
-  leaveRequestFromDate DATE NOT NULL,
-  leaveRequestToDate DATE NOT NULL,
-  leaveRequestDays INT NOT NULL,
-  leaveRequestReason TEXT,
-  leaveRequestStatus VARCHAR(20) DEFAULT 'pending',
-  leaveRequestApprovedBy INT,
-  leaveRequestApprovedAt DATETIME,
-  leaveRequestCreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (leaveRequestLeaveTypeId) REFERENCES mtpl_leave_types(leaveTypeId)
-);
-```
-**Status:** ✅ Schema created in `leave_management_schema.sql`
-
----
-
-## 🔌 API Endpoints Created
-
-### Leave Types Management ✅
-- [x] `GET /api/leave-types` - List all leave types
-- [x] `POST /api/leave-types` - Create new leave type
-- [x] `DELETE /api/leave-types/{id}` - Delete leave type
-
-### Leave Balance Management ✅
-- [x] `GET /api/user-leave-balance` - Get employee balance
-- [x] `POST /api/user-leave-balance` - Assign/update balance
-
-### Leave Request Management ✅
-- [x] `GET /api/leave-requests` - List requests (with filters)
-- [x] `POST /api/leave-requests` - Create request
-- [x] `POST /api/leave-requests/{id}/approve` - Approve request
-- [x] `POST /api/leave-requests/{id}/reject` - Reject request
-
-**Total APIs:** 9 new endpoints ✅
-
----
-
-## 🎨 User Interface Created
-
-### Page: /leave-management ✅
-
-#### Tab 1: Admin Panel ✅
-- [x] Create leave types section
-- [x] List of leave types with delete button
-- [x] Assign leave balance section
-- [x] Employee dropdown
-- [x] Leave type dropdown
-- [x] Total leaves input
-- [x] Year input
-- [x] Assign button
-
-#### Tab 2: Employee Panel ✅
-- [x] Employee selection dropdown
-- [x] Leave balance display (total/used/remaining)
-- [x] Request leave form
-- [x] Leave type selection
-- [x] Date range picker (from/to)
-- [x] Reason textarea
-- [x] Submit button
-
-#### Tab 3: Leave Requests ✅
-- [x] Filter buttons (All/Pending/Approved/Rejected)
-- [x] Requests table with columns:
-  - Employee name
-  - Leave type
-  - From date
-  - To date
-  - Days
-  - Reason
-  - Status badge
-  - Action buttons (Approve/Reject)
-- [x] Color-coded status badges
-- [x] Approve/Reject buttons for pending requests
-
-**Status:** ✅ Complete UI in `templates/leave_management.html`
-
----
-
-## 📝 Documentation Created
-
-### Files Created ✅
-1. [x] `leave_management_schema.sql` - Database schema
-2. [x] `LEAVE_MANAGEMENT_GUIDE.md` - Complete usage guide
-3. [x] `LEAVE_QUICK_START.md` - Quick reference
-4. [x] `LEAVE_SYSTEM_ARCHITECTURE.md` - Architecture diagrams
-5. [x] `IMPLEMENTATION_SUMMARY.md` - Implementation details
-6. [x] `IMPLEMENTATION_CHECKLIST.md` - This file
-7. [x] `init_leave_system.py` - Initialization script
-
-### Updated Files ✅
-1. [x] `README.md` - Added leave management section
-2. [x] `models.py` - Added 3 new models
-3. [x] `app.py` - Added 10 new routes
-4. [x] `templates/base.html` - Added menu item
-
----
-
-## 🧪 Testing Checklist
-
-### Admin Functions
-- [ ] Create leave type "Casual Leave"
-- [ ] Create leave type "Sick Leave"
-- [ ] Create leave type "Celebratory Leave"
-- [ ] Assign 12 Casual Leaves to Employee 1
-- [ ] Assign 10 Sick Leaves to Employee 1
-- [ ] View assigned balances
-
-### Employee Functions
-- [ ] Select employee and view balance
-- [ ] Request 3 days Casual Leave
-- [ ] Request 2 days Sick Leave
-- [ ] Verify balance validation works
-- [ ] Try requesting more than available (should fail)
-
-### Approval Functions
-- [ ] View pending requests
-- [ ] Approve a request
-- [ ] Verify balance deducted
-- [ ] Reject a request
-- [ ] Verify balance not deducted
-- [ ] Filter by status (pending/approved/rejected)
-
----
-
-## 🚀 Deployment Steps
-
-### Step 1: Database Setup ✅
-```bash
-mysql -u root -p mtpl_website < leave_management_schema.sql
+-- Allotments by leave type
+SELECT lt.leaveTypeName, COUNT(*) 
+FROM mtpl_leave_allotment a
+JOIN mtpl_leave_types lt ON a.allotmentLeaveTypeId = lt.leaveTypeId
+GROUP BY lt.leaveTypeName;
 ```
 
-### Step 2: Initialize System ✅
-```bash
-python init_leave_system.py
-```
+## 📝 Notes
 
-### Step 3: Start Application ✅
-```bash
-python app.py
-```
-
-### Step 4: Access System ✅
-```
-http://127.0.0.1:5000/leave-management
-```
+- Keep this checklist for future reference
+- Update as needed based on experience
+- Share with team members
+- Use for training new developers
 
 ---
 
-## 📋 Feature Comparison
-
-| Feature | Required | Implemented | Status |
-|---------|----------|-------------|--------|
-| Dynamic leave types | ✅ | ✅ | ✅ Complete |
-| Admin create types | ✅ | ✅ | ✅ Complete |
-| Admin assign balance | ✅ | ✅ | ✅ Complete |
-| Employee view balance | ✅ | ✅ | ✅ Complete |
-| Employee request leave | ✅ | ✅ | ✅ Complete |
-| Admin approve/reject | ✅ | ✅ | ✅ Complete |
-| Automatic calculation | ✅ | ✅ | ✅ Complete |
-| Balance validation | ✅ | ✅ | ✅ Complete |
-| Year-wise tracking | ✅ | ✅ | ✅ Complete |
-| Status tracking | ✅ | ✅ | ✅ Complete |
-| Audit trail | ✅ | ✅ | ✅ Complete |
-
-**Overall Status:** ✅ 100% Complete
-
----
-
-## 🎯 Key Achievements
-
-### 1. Fully Dynamic System ✅
-- No hardcoded leave types
-- Admin controls everything via UI
-- No code changes needed for new leave types
-
-### 2. Comprehensive Validation ✅
-- Balance validation before request
-- Balance validation before approval
-- Date range validation
-- Duplicate prevention
-
-### 3. Complete Workflow ✅
-- Request → Pending → Approved/Rejected
-- Automatic balance updates
-- Audit trail maintained
-
-### 4. User-Friendly Interface ✅
-- Tabbed interface for different roles
-- Color-coded status badges
-- Real-time updates
-- Responsive design
-
-### 5. Well Documented ✅
-- 6 documentation files
-- API examples
-- SQL queries
-- Architecture diagrams
-
----
-
-## 📊 Statistics
-
-- **New Database Tables:** 3
-- **New API Endpoints:** 9
-- **New UI Pages:** 1 (with 3 tabs)
-- **New Models:** 3
-- **Documentation Files:** 6
-- **Lines of Code Added:** ~800+
-- **SQL Schema Lines:** ~60
-- **Documentation Pages:** ~500+ lines
-
----
-
-## ✅ Final Verification
-
-### For Your Sir to Check:
-
-1. **Database Tables Created?**
-   - Run: `SHOW TABLES LIKE 'mtpl_leave%';`
-   - Should show 3 tables ✅
-
-2. **APIs Working?**
-   - Visit: `http://127.0.0.1:5000/api/leave-types`
-   - Should return JSON ✅
-
-3. **UI Accessible?**
-   - Visit: `http://127.0.0.1:5000/leave-management`
-   - Should show 3 tabs ✅
-
-4. **Can Create Leave Types?**
-   - Go to Admin Panel
-   - Add "Casual Leave"
-   - Should appear in list ✅
-
-5. **Can Assign Balance?**
-   - Select employee
-   - Select leave type
-   - Enter total (e.g., 12)
-   - Click Assign ✅
-
-6. **Can Request Leave?**
-   - Go to Employee Panel
-   - Select employee
-   - Fill form
-   - Submit request ✅
-
-7. **Can Approve/Reject?**
-   - Go to Leave Requests tab
-   - Click approve/reject
-   - Balance should update ✅
-
----
-
-## 🎉 Completion Status
-
-**Overall Implementation:** ✅ 100% COMPLETE
-
-**All Requirements Met:** ✅ YES
-
-**Ready for Production:** ✅ YES
-
-**Documentation Complete:** ✅ YES
-
----
-
-## 📞 Support Files
-
-If your sir has questions, refer to:
-1. `LEAVE_QUICK_START.md` - Quick setup guide
-2. `LEAVE_MANAGEMENT_GUIDE.md` - Detailed usage
-3. `LEAVE_SYSTEM_ARCHITECTURE.md` - Technical details
-4. `IMPLEMENTATION_SUMMARY.md` - What was built
-
----
-
-**Implementation Date:** December 2024  
-**Developer:** Amazon Q  
-**Status:** ✅ COMPLETE AND TESTED  
-**Ready for Review:** ✅ YES
+**Checklist Version:** 1.0
+**Last Updated:** 2024
+**Status:** Ready for Implementation

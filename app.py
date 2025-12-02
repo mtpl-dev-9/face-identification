@@ -16,7 +16,11 @@ from flasgger import Swagger
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType
+from multilevel_models import LeaveApprover, LeaveApproval
+from multilevel_approval_apis import add_multilevel_approval_routes
+from user_approvers_model import UserApprover
+from user_approvers_api import add_user_approvers_routes
 from sqlalchemy import and_, func
 from datetime import date, datetime as dt
 import pytz
@@ -68,6 +72,102 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+    
+    # Add multi-level approval routes
+    add_multilevel_approval_routes(app, db)
+    
+    # Add user approvers routes (simple version)
+    @app.route("/api/user-approvers-simple", methods=["GET"])
+    def api_get_user_approvers_simple():
+        """
+        Get User Approvers
+        ---
+        tags:
+          - Multi-Level Approval
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+            description: Filter by user ID
+        responses:
+          200:
+            description: List of user approver assignments
+        """
+        try:
+            from user_approvers_model import UserApprover
+            user_id = request.args.get('user_id', type=int)
+            
+            query = UserApprover.query.filter_by(userApproverIsActive=True)
+            if user_id:
+                query = query.filter_by(userApproverUserId=user_id)
+            
+            assignments = query.all()
+            return jsonify({
+                "success": True, 
+                "assignments": [a.to_dict() for a in assignments]
+            })
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    @app.route("/api/user-approvers-simple", methods=["POST"])
+    def api_assign_approvers_simple():
+        """
+        Assign Approvers to User
+        ---
+        tags:
+          - Multi-Level Approval
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                  description: User ID to assign approvers to
+                approver_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: List of approver IDs
+        responses:
+          200:
+            description: Approvers assigned successfully
+        """
+        try:
+            from user_approvers_model import UserApprover
+            data = request.get_json() or {}
+            user_id = data.get('user_id')
+            approver_ids = data.get('approver_ids', [])
+            
+            if not user_id or not approver_ids:
+                return jsonify({"success": False, "error": "user_id and approver_ids required"}), 400
+            
+            # Clear existing
+            UserApprover.query.filter_by(userApproverUserId=user_id).delete()
+            
+            # Add new
+            assignments = []
+            for approver_id in approver_ids:
+                assignment = UserApprover(
+                    userApproverUserId=user_id,
+                    userApproverApproverId=approver_id
+                )
+                db.session.add(assignment)
+                assignments.append(assignment)
+            
+            db.session.commit()
+            
+            return jsonify({
+                "success": True,
+                "count": len(assignments),
+                "assignments": [a.to_dict() for a in assignments]
+            })
+            
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
 
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
@@ -1520,6 +1620,286 @@ def create_app():
         
         db.session.commit()
         return jsonify({"success": True, "request": leave_request.to_dict()})
+
+     --- Leave Allotment APIs ---
+    @app.route("/api/leave-allotments", methods=["GET"])
+    def api_get_leave_allotments():
+        """
+        Get Leave Allotments
+        ---
+        tags:
+          - Leave Allotment
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+          - name: year
+            in: query
+            type: integer
+        responses:
+          200:
+            description: List of leave allotments
+        """
+        user_id = request.args.get('user_id', type=int)
+        year = request.args.get('year', get_ist_now().year, type=int)
+        
+        query = LeaveAllotment.query
+        if user_id:
+            query = query.filter_by(allotmentUserId=user_id)
+        if year:
+            query = query.filter_by(allotmentYear=year)
+        
+        allotments = query.order_by(LeaveAllotment.allotmentAssignedAt.desc()).all()
+        return jsonify({"success": True, "allotments": [a.to_dict() for a in allotments]})
+
+    @app.route("/api/leave-allotments", methods=["POST"])
+    def api_create_leave_allotment():
+        """
+        Create Leave Allotment
+        ---
+        tags:
+          - Leave Allotment
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                leave_type_id:
+                  type: integer
+                total:
+                  type: number
+                year:
+                  type: integer
+                assigned_by:
+                  type: integer
+        responses:
+          200:
+            description: Leave allotment created
+        """
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        assigned_by = data.get('assigned_by')
+        
+        if not user_id or not leave_type_id:
+            return jsonify({"success": False, "error": "user_id and leave_type_id required"}), 400
+        
+        existing = LeaveAllotment.query.filter_by(
+            allotmentUserId=user_id,
+            allotmentLeaveTypeId=leave_type_id,
+            allotmentYear=year
+        ).first()
+        
+        if existing:
+            existing.allotmentTotal = total
+            existing.allotmentAssignedBy = assigned_by
+            existing.allotmentUpdatedAt = get_ist_now()
+            db.session.commit()
+            return jsonify({"success": True, "allotment": existing.to_dict()})
+        
+        allotment = LeaveAllotment(
+            allotmentUserId=user_id,
+            allotmentLeaveTypeId=leave_type_id,
+            allotmentTotal=total,
+            allotmentYear=year,
+            allotmentAssignedBy=assigned_by
+        )
+        db.session.add(allotment)
+        db.session.flush()
+        db.session.commit()
+        db.session.refresh(allotment)
+        
+        # Force write with raw SQL to ensure it's in database
+        db.session.execute(db.text("SELECT 1"))
+        
+      #  return jsonify({"success": True, "allotment": allotment.to_dict()})
+
+    @app.route("/api/leave-allotments/bulk", methods=["POST"])
+    def api_create_bulk_leave_allotment():
+        """
+        Bulk Create Leave Allotments
+        ---
+        tags:
+          - Leave Allotment
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+                leave_type_id:
+                  type: integer
+                total:
+                  type: number
+                year:
+                  type: integer
+                assigned_by:
+                  type: integer
+        responses:
+          200:
+            description: Leave allotments created for multiple users
+        """
+        data = request.get_json() or {}
+        user_ids = data.get('user_ids', [])
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        assigned_by = data.get('assigned_by')
+        
+        if not user_ids or not leave_type_id:
+            return jsonify({"success": False, "error": "user_ids and leave_type_id required"}), 400
+        
+        results = []
+        for user_id in user_ids:
+            existing = LeaveAllotment.query.filter_by(
+                allotmentUserId=user_id,
+                allotmentLeaveTypeId=leave_type_id,
+                allotmentYear=year
+            ).first()
+            
+            if existing:
+                existing.allotmentTotal = total
+                existing.allotmentAssignedBy = assigned_by
+                existing.allotmentUpdatedAt = get_ist_now()
+                results.append(existing)
+            else:
+                allotment = LeaveAllotment(
+                    allotmentUserId=user_id,
+                    allotmentLeaveTypeId=leave_type_id,
+                    allotmentTotal=total,
+                    allotmentYear=year,
+                    allotmentAssignedBy=assigned_by
+                )
+                db.session.add(allotment)
+                results.append(allotment)
+        
+        db.session.flush()
+        db.session.commit()
+        
+        # Verify data was written
+        verify_count = LeaveAllotment.query.filter_by(allotmentYear=year, allotmentLeaveTypeId=leave_type_id).count()
+        
+        return jsonify({"success": True, "count": len(results), "verified_in_db": verify_count, "allotments": [a.to_dict() for a in results]})
+
+    @app.route("/api/leave-allotments/<int:allotment_id>", methods=["DELETE"])
+    def api_delete_leave_allotment(allotment_id):
+        """
+        Delete Leave Allotment
+        ---
+        tags:
+          - Leave Allotment
+        parameters:
+          - name: allotment_id
+            in: path
+            type: integer
+            required: true
+        responses:
+          200:
+            description: Leave allotment deleted
+        """
+        allotment = LeaveAllotment.query.get(allotment_id)
+        if not allotment:
+            return jsonify({"success": False, "error": "Allotment not found"}), 404
+        
+        db.session.delete(allotment)
+        db.session.commit()
+        
+        return jsonify({"success": True})
+
+    @app.route("/api/leave-allotments/default", methods=["POST"])
+    def api_assign_default_leave_allotments():
+        """
+        Assign Default Leave Allotments to All Users
+        ---
+        tags:
+          - Leave Allotment
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                year:
+                  type: integer
+                defaults:
+                  type: object
+                  properties:
+                    casual:
+                      type: number
+                    sick:
+                      type: number
+                    celebratory:
+                      type: number
+                assigned_by:
+                  type: integer
+        responses:
+          200:
+            description: Default leaves assigned
+        """
+        from models import LeaveType
+        data = request.get_json() or {}
+        year = data.get('year', get_ist_now().year)
+        defaults = data.get('defaults', {'casual': 4, 'sick': 7, 'celebratory': 0.5})
+        assigned_by = data.get('assigned_by')
+        
+        users = User.query.filter_by(userIsActive='1').all()
+        if not users:
+            return jsonify({"success": False, "error": "No users found"}), 404
+        
+        leave_types = {}
+        for name in ['Casual Leave', 'Sick Leave', 'Celebratory Leave']:
+            lt = LeaveType.query.filter_by(leaveTypeName=name).first()
+            if not lt:
+                lt = LeaveType(leaveTypeName=name)
+                db.session.add(lt)
+                db.session.flush()
+            leave_types[name] = lt
+        
+        mapping = {
+            'Casual Leave': defaults.get('casual', 4),
+            'Sick Leave': defaults.get('sick', 7),
+            'Celebratory Leave': defaults.get('celebratory', 0.5)
+        }
+        
+        count = 0
+        for user in users:
+            for leave_name, total in mapping.items():
+                leave_type = leave_types[leave_name]
+                allotment = LeaveAllotment.query.filter_by(
+                    allotmentUserId=user.userId,
+                    allotmentLeaveTypeId=leave_type.leaveTypeId,
+                    allotmentYear=year
+                ).first()
+                
+                if allotment:
+                    allotment.allotmentTotal = total
+                    allotment.allotmentAssignedBy = assigned_by
+                    allotment.allotmentUpdatedAt = get_ist_now()
+                else:
+                    allotment = LeaveAllotment(
+                        allotmentUserId=user.userId,
+                        allotmentLeaveTypeId=leave_type.leaveTypeId,
+                        allotmentTotal=total,
+                        allotmentYear=year,
+                        allotmentAssignedBy=assigned_by
+                    )
+                    db.session.add(allotment)
+                count += 1
+        
+        db.session.commit()
+        return jsonify({"success": True, "count": count, "users": len(users)})
 
     return app
 

@@ -128,9 +128,12 @@ face_a/
 ├── DATABASE_DOCUMENTATION.md   # Database schema docs
 ├── DATABASE_SCHEMA.sql         # SQL schema file
 ├── SWAGGER_SETUP.md            # Swagger setup guide
-├── leave_management_schema.sql # Leave system SQL schema (NEW)
-├── LEAVE_MANAGEMENT_GUIDE.md   # Leave system guide (NEW)
-├── init_leave_system.py        # Leave system initializer (NEW)
+├── leave_management_schema.sql # Leave system SQL schema
+├── leave_allotment_schema.sql  # Leave allotment SQL schema (NEW)
+├── LEAVE_MANAGEMENT_GUIDE.md   # Leave system guide
+├── LEAVE_ALLOTMENT_GUIDE.md    # Leave allotment guide (NEW)
+├── init_leave_system.py        # Leave system initializer
+├── init_leave_allotment.py     # Leave allotment initializer (NEW)
 └── README.md                   # This file
 ```
 
@@ -168,14 +171,16 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 Update in `config.py`.
 
-4. Initialize Leave Management System (NEW):
+4. Initialize Leave Management System:
 
 ```bash
-# Run SQL schema
-mysql -u root -p mtpl_website < leave_management_schema.sql
+# Run SQL schemas
+mysql -u admin -p mtpl_website < leave_management_schema.sql
+mysql -u admin -p mtpl_website < leave_allotment_schema.sql
 
-# Or initialize via Python script
+# Or initialize via Python scripts
 python init_leave_system.py
+python init_leave_allotment.py
 ```
 
 5. Run the application:
@@ -220,23 +225,29 @@ Access interactive API documentation at:
 - `POST /api/register-face` - Register new person
 - `DELETE /api/persons/{id}` - Delete person
 
-**Leave Management (NEW)**
+**Leave Management**
 - `GET /api/leave-types` - Get all leave types
 - `POST /api/leave-types` - Create leave type
 - `DELETE /api/leave-types/{id}` - Delete leave type
-- `GET /api/user-leave-balance` - Get user leave balance
-- `POST /api/user-leave-balance` - Assign leave balance
 - `GET /api/leave-requests` - Get leave requests
 - `POST /api/leave-requests` - Create leave request
 - `POST /api/leave-requests/{id}/approve` - Approve request
 - `POST /api/leave-requests/{id}/reject` - Reject request
+
+**Leave Allotment (NEW)**
+- `GET /api/leave-allotments` - Get leave allotments
+- `POST /api/leave-allotments` - Create leave allotment
+- `POST /api/leave-allotments/bulk` - Bulk assign leaves
+- `POST /api/leave-allotments/default` - Assign default leaves to all
+- `DELETE /api/leave-allotments/{id}` - Delete leave allotment
 
 ### Documentation Files
 - `API_DOCUMENTATION.md` - Complete API reference with examples
 - `API_QUICK_REFERENCE.md` - Quick start guide
 - `SWAGGER_SETUP.md` - Swagger setup and usage guide
 - `DATABASE_DOCUMENTATION.md` - Database schema and queries
-- `LEAVE_MANAGEMENT_GUIDE.md` - Leave system complete guide (NEW)
+- `LEAVE_MANAGEMENT_GUIDE.md` - Leave system complete guide
+- `LEAVE_ALLOTMENT_GUIDE.md` - Leave allotment system guide (NEW)
 
 ## Usage
 
@@ -277,14 +288,16 @@ Access interactive API documentation at:
 - **Attendance Report**: Detailed records with times and locations
 - **Persons**: List of registered employees
 
-### 6. Manage Leaves (NEW)
+### 6. Manage Leaves
 - Go to **Leave Management** page
 - **Admin Panel**:
   - Create leave types (Casual, Sick, Celebratory)
-  - Assign leave balances to employees
+  - Assign leave balances to employees (stored in `mtpl_leave_allotment`)
+  - Bulk assign leaves to multiple employees
+  - Set default leaves for all users
   - Set total leaves per year
 - **Employee Panel**:
-  - View leave balance
+  - View leave balance from allotment table
   - Request leaves with date range
   - Track request status
 - **Leave Requests**:
@@ -320,13 +333,18 @@ Access interactive API documentation at:
 **allowed_ip**
 - `id`, `ip_address`, `description`, `is_active`, `created_at`
 
-**leave_types (NEW)**
+**leave_types**
 - `id`, `name`, `is_active`, `created_at`
 
-**user_leave_balance (NEW)**
-- `id`, `user_id`, `leave_type_id`, `total`, `used`, `year`, `updated_at`
+**leave_allotment (NEW)**
+- `id`, `user_id`, `leave_type_id`, `total`, `year`, `assigned_by`, `assigned_at`, `updated_at`
+- Stores leave allocations for employees (supports decimals like 0.5, 12.5)
 
-**leave_requests (NEW)**
+**user_leave_balance**
+- `id`, `user_id`, `leave_type_id`, `total`, `used`, `year`, `updated_at`
+- Tracks used leaves (updated when requests are approved)
+
+**leave_requests**
 - `id`, `user_id`, `leave_type_id`, `from_date`, `to_date`, `days`, `reason`
 - `status`, `approved_by`, `approved_at`, `created_at`
 

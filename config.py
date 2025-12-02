@@ -33,14 +33,16 @@ class Config:
     # Update this to match your server credentials from backend .env
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://admin:db_user_b9JS&eI#@192.168.31.229:3306/mtpl_website"
+        "mysql+pymysql://root:Krunal%4018@127.0.0.1:3306/mtpl_website"
     )
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,
         'pool_recycle': 3600,
+        'isolation_level': 'READ COMMITTED',
     }
+    SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     
     # ============================================
     # FILE UPLOAD CONFIGURATION

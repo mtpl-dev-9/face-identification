@@ -202,6 +202,42 @@ class UserLeaveBalance(db.Model):
         }
 
 
+class LeaveAllotment(db.Model):
+    __tablename__ = "mtpl_leave_allotment"
+
+    allotmentId = db.Column('allotmentId', db.Integer, primary_key=True)
+    allotmentUserId = db.Column('allotmentUserId', db.Integer, nullable=False, index=True)
+    allotmentLeaveTypeId = db.Column('allotmentLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
+    allotmentTotal = db.Column('allotmentTotal', db.Numeric(5, 1), nullable=False, default=0)
+    allotmentYear = db.Column('allotmentYear', db.Integer, nullable=False, index=True)
+    allotmentAssignedBy = db.Column('allotmentAssignedBy', db.Integer, nullable=True)
+    allotmentAssignedAt = db.Column('allotmentAssignedAt', db.DateTime, default=get_ist_now)
+    allotmentUpdatedAt = db.Column('allotmentUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    leave_type = db.relationship('LeaveType', backref='allotments')
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.allotmentUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.allotmentUserId)
+        
+        assigned_by_user = User.query.filter_by(userId=self.allotmentAssignedBy).first() if self.allotmentAssignedBy else None
+        assigned_by_name = f"{assigned_by_user.userFirstName} {assigned_by_user.userLastName}" if assigned_by_user else None
+        
+        return {
+            "id": self.allotmentId,
+            "user_id": self.allotmentUserId,
+            "user_name": user_name,
+            "leave_type_id": self.allotmentLeaveTypeId,
+            "leave_type_name": self.leave_type.leaveTypeName,
+            "total": float(self.allotmentTotal),
+            "year": self.allotmentYear,
+            "assigned_by": self.allotmentAssignedBy,
+            "assigned_by_name": assigned_by_name,
+            "assigned_at": self.allotmentAssignedAt.isoformat() + "Z" if self.allotmentAssignedAt else None,
+            "updated_at": self.allotmentUpdatedAt.isoformat() + "Z" if self.allotmentUpdatedAt else None
+        }
+
+
 class LeaveRequest(db.Model):
     __tablename__ = "mtpl_leave_requests"
 
