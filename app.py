@@ -670,16 +670,14 @@ def create_app():
 
     @app.route("/api/biometric/<int:user_id>", methods=["DELETE"])
     def api_delete_biometric(user_id):
-        """Delete user's biometric data"""
+        """Deactivate user's biometric data"""
         try:
             person = Person.query.filter_by(biometricUserId=user_id).first()
             if not person:
                 return jsonify({"success": False, "error": "No biometric found"}), 404
-            
-            db.session.delete(person)
+            person.biometricIsActive = False
             db.session.commit()
-            
-            return jsonify({"success": True, "message": "Biometric deleted successfully"})
+            return jsonify({"success": True, "message": "Biometric deactivated successfully"})
         except Exception as e:
             db.session.rollback()
             return jsonify({"success": False, "error": str(e)}), 500
