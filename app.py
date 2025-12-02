@@ -272,12 +272,15 @@ def create_app():
            if len(encodings) > 1:
                return jsonify({"success": False, "error": "Multiple faces detected. Please show only one face."}), 422
 
-           # Check if face already registered
-           all_persons = Person.query.filter_by(biometricIsActive=True).all()
+           # Check if face already registered - EXCLUDE current user
+           all_persons = Person.query.filter(
+               Person.biometricIsActive == True,
+               Person.biometricUserId != user_id_int
+           ).all()
            existing_encodings = [decode_from_json(p.biometricEncoding) for p in all_persons]
            
-           if check_face_exists(encodings[0], existing_encodings, tolerance=app.config["FACE_RECOGNITION_TOLERANCE"]):
-               return jsonify({"success": False, "error": "This face is already registered"}), 400
+           if existing_encodings and check_face_exists(encodings[0], existing_encodings, tolerance=app.config["FACE_RECOGNITION_TOLERANCE"]):
+               return jsonify({"success": False, "error": "This face is already registered to another user"}), 400
 
            encoding_json = encode_to_json(encodings[0])
            person = Person(biometricUserId=user_id_int, biometricEncoding=encoding_json)
