@@ -201,9 +201,12 @@ def create_app():
             return jsonify({
                 "success": True,
                 "users": [{
+                    "user_id": u.userId,
                     "userId": u.userId,
+                    "name": f"{u.userFirstName or ''} {u.userLastName or ''}".strip(),
                     "userFirstName": u.userFirstName or "",
                     "userLastName": u.userLastName or "",
+                    "employee_code": u.userLogin or str(u.userId),
                     "userLogin": u.userLogin or ""
                 } for u in users]
             })
@@ -382,7 +385,7 @@ def create_app():
     def api_register_face_live():
        try:
            data = request.get_json() or {}
-           user_id = data.get("user_id")
+           user_id = data.get("user_id") or data.get("employee_code")
            image_data = data.get("image")
 
            if not user_id or not image_data:
@@ -412,11 +415,11 @@ def create_app():
            if today_record and today_record.attendanceClockOutTime is None:
                return jsonify({"success": False, "error": "Please clock out first before re-registering your face"}), 403
 
-           # Check if user already has biometric (allow update if exists)
-           existing_person = Person.query.filter_by(biometricUserId=user_id_int).first()
+           # Check if user already has biometric 
+           existing_person = Person.query.filter_by(biometricUserId=user_id_int, biometricIsActive=True).first()
            if existing_person:
-               # Delete old biometric for update
-               db.session.delete(existing_person)
+               # Deactivate old biometric instead of deleting
+               existing_person.biometricIsActive = False
                db.session.commit()
 
            img_array = load_image_from_base64(image_data)
@@ -760,8 +763,8 @@ def create_app():
         latitude = data.get("latitude")
         longitude = data.get("longitude")
 
-        if not user_id or not image_data or not action:
-            return jsonify({"success": False, "error": "user_id, image and action required"}), 400
+        if not image_data or not action:
+            return jsonify({"success": False, "error": "image and action required"}), 400
 
         if action not in ["clock_in", "clock_out"]:
             return jsonify({"success": False, "error": "action must be clock_in or clock_out"}), 400
@@ -779,8 +782,8 @@ def create_app():
         if not person:
             return jsonify({"success": False, "error": "Unknown face"}), 404
 
-        # Verify detected face matches the authenticated user
-        if person.biometricUserId != user_id:
+        # If user_id provided, verify face matches
+        if user_id and person.biometricUserId != int(user_id):
             return jsonify({"success": False, "error": "Face does not match authenticated user. Please use your own registered face."}), 403
 
         # Then check IP and location
@@ -925,6 +928,33 @@ def create_app():
                 "results": [r.to_dict() for r in records],
             }
         )
+
+    @app.route("/api/attendance/today/<user_id>", methods=["GET"])
+    def api_attendance_today(user_id):
+        """
+        Get Today's Attendance
+        ---
+        tags:
+          - Attendance
+        parameters:
+          - name: user_id
+            in: path
+            required: true
+            type: string
+        responses:
+          200:
+            description: Today's attendance record
+        """
+        now = get_ist_now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        record = Attendance.query.filter(
+            Attendance.attendanceUserId == user_id,
+            Attendance.attendanceTimestamp >= today_start,
+            Attendance.attendanceClockInTime.isnot(None)
+        ).order_by(Attendance.attendanceTimestamp.desc()).first()
+        if not record:
+            return jsonify({"success": True, "attendance": None}), 404
+        return jsonify({"success": True, "attendance": record.to_dict()})
 
     @app.route("/api/attendance/break", methods=["POST"])
     def api_attendance_break():
