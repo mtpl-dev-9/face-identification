@@ -257,6 +257,20 @@ def create_app():
            if not user:
                return jsonify({"success": False, "error": "User not found or inactive"}), 404
 
+           # Check if user is currently clocked in
+           now = get_ist_now()
+           today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+           today_record = Attendance.query.filter(
+               and_(
+                   Attendance.attendanceUserId == user_id_int,
+                   Attendance.attendanceTimestamp >= today_start,
+                   Attendance.attendanceClockInTime.isnot(None)
+               )
+           ).order_by(Attendance.attendanceTimestamp.desc()).first()
+           
+           if today_record and today_record.attendanceClockOutTime is None:
+               return jsonify({"success": False, "error": "Please clock out first before re-registering your face"}), 403
+
            # Check if user already has biometric (allow update if exists)
            existing_person = Person.query.filter_by(biometricUserId=user_id_int).first()
            if existing_person:
@@ -453,6 +467,27 @@ def create_app():
             "biometricId": person.biometricId if person else None
         })
 
+    @app.route("/api/attendance/check-status/<int:user_id>", methods=["GET"])
+    def api_check_attendance_status(user_id):
+        """Check if user is currently clocked in"""
+        now = get_ist_now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        today_record = Attendance.query.filter(
+            and_(
+                Attendance.attendanceUserId == user_id,
+                Attendance.attendanceTimestamp >= today_start,
+                Attendance.attendanceClockInTime.isnot(None)
+            )
+        ).order_by(Attendance.attendanceTimestamp.desc()).first()
+        
+        is_clocked_in = today_record is not None and today_record.attendanceClockOutTime is None
+        
+        return jsonify({
+            "success": True,
+            "isClockedIn": is_clocked_in
+        })
+
     @app.route("/api/biometric/<int:user_id>", methods=["DELETE"])
     def api_delete_biometric(user_id):
         """Delete user's biometric data"""
@@ -528,6 +563,8 @@ def create_app():
             schema:
               type: object
               properties:
+                user_id:
+                  type: integer
                 image:
                   type: string
                 action:
@@ -542,17 +579,36 @@ def create_app():
             description: Success
         """
         data = request.get_json(silent=True) or {}
+        user_id = data.get("user_id")
         image_data = data.get("image")
         action = data.get("action")
         latitude = data.get("latitude")
         longitude = data.get("longitude")
 
-        if not image_data or not action:
-            return jsonify({"success": False, "error": "image and action required"}), 400
+        if not user_id or not image_data or not action:
+            return jsonify({"success": False, "error": "user_id, image and action required"}), 400
 
         if action not in ["clock_in", "clock_out"]:
             return jsonify({"success": False, "error": "action must be clock_in or clock_out"}), 400
 
+        # Check face first
+        img_array = load_image_from_base64(image_data)
+        encodings = get_face_encodings(img_array)
+
+        if not encodings:
+            return jsonify({"success": False, "error": "No face detected"}), 422
+
+        encoding = encodings[0]
+        person, face_distance = match_single_encoding(encoding)
+
+        if not person:
+            return jsonify({"success": False, "error": "Unknown face"}), 404
+
+        # Verify detected face matches the authenticated user
+        if person.biometricUserId != user_id:
+            return jsonify({"success": False, "error": "Face does not match authenticated user. Please use your own registered face."}), 403
+
+        # Then check IP and location
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if ',' in client_ip:
             client_ip = client_ip.split(',')[0].strip()
@@ -577,18 +633,6 @@ def create_app():
                 "success": False,
                 "error": f"You are {distance_from_office:.2f}m away. Must be within {office_settings['radius']}m"
             }), 403
-
-        img_array = load_image_from_base64(image_data)
-        encodings = get_face_encodings(img_array)
-
-        if not encodings:
-            return jsonify({"success": False, "error": "No face detected"}), 422
-
-        encoding = encodings[0]
-        person, face_distance = match_single_encoding(encoding)
-
-        if not person:
-            return jsonify({"success": False, "error": "Unknown face"}), 404
 
         # Verify user is still active
         user = User.query.filter_by(userId=person.biometricUserId, userIsActive='1').first()
