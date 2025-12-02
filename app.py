@@ -1,6 +1,8 @@
 import os
 from datetime import datetime, timedelta
 from typing import List
+from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 from flask import (
     Flask,
@@ -13,6 +15,9 @@ from flask import (
 )
 from flask_cors import CORS
 from flasgger import Swagger
+
+# Load environment variables
+load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
@@ -58,6 +63,16 @@ import face_recognition
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    
+    # Load database configuration from .env
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{os.environ.get('DB_USER')}:{quote_plus(os.environ.get('DB_PASSWORD'))}@{os.environ.get('DB_HOST')}:{os.environ.get('DB_PORT')}/{os.environ.get('DB_NAME')}"
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 3600,
+        'isolation_level': 'READ COMMITTED',
+    }
+    app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 
     # folders
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -167,6 +182,32 @@ def create_app():
             
         except Exception as e:
             db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # ---------- API: Get Users ----------
+    @app.route("/api/users", methods=["GET"])
+    def api_get_users():
+        """
+        Get All Users
+        ---
+        tags:
+          - User Management
+        responses:
+          200:
+            description: List of all active users
+        """
+        try:
+            users = User.query.filter_by(userIsActive='1').all()
+            return jsonify({
+                "success": True,
+                "users": [{
+                    "userId": u.userId,
+                    "userFirstName": u.userFirstName or "",
+                    "userLastName": u.userLastName or "",
+                    "userLogin": u.userLogin or ""
+                } for u in users]
+            })
+        except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 
     # ---------- helper: match face ----------
@@ -416,15 +457,6 @@ def create_app():
     def api_get_persons():
         persons = Person.query.filter_by(biometricIsActive=True).order_by(Person.biometricCreatedAt.desc()).all()
         return jsonify({"success": True, "persons": [p.to_dict() for p in persons]})
-
-    @app.route("/api/users", methods=["GET"])
-    def api_get_users():
-        users = User.query.filter_by(userIsActive='1').all()
-        return jsonify({"success": True, "users": [{
-            "user_id": u.userId,
-            "name": f"{u.userFirstName} {u.userLastName}".strip(),
-            "employee_code": u.userLogin or str(u.userId)
-        } for u in users]})
 
     @app.route("/api/users/bulk", methods=["POST"])
     def api_bulk_add_users():
@@ -1666,7 +1698,7 @@ def create_app():
         db.session.commit()
         return jsonify({"success": True, "request": leave_request.to_dict()})
 
-     --- Leave Allotment APIs ---
+    #  --- Leave Allotment APIs ---
     @app.route("/api/leave-allotments", methods=["GET"])
     def api_get_leave_allotments():
         """

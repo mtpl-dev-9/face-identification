@@ -1,9 +1,14 @@
 import os
 from math import radians, sin, cos, sqrt, atan2
 import pytz
+from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 IST = pytz.timezone('Asia/Kolkata')
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two coordinates in meters using Haversine formula"""
@@ -25,24 +30,6 @@ class Config:
     # ============================================
     # Generate secure key: python -c "import secrets; print(secrets.token_hex(32))"
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-key-f8a3c9e2d1b4a7f6e5d4c3b2a1"
-    
-    # ============================================
-    # DATABASE CONFIGURATION
-    # ============================================
-    # Server MySQL Configuration for MTPL Database
-    # Update this to match your server credentials from backend .env
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL",
-        "mysql+pymysql://root:Krunal%4018@127.0.0.1:3306/mtpl_website"
-    )
-    
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,
-        'pool_recycle': 3600,
-        'isolation_level': 'READ COMMITTED',
-    }
-    SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     
     # ============================================
     # FILE UPLOAD CONFIGURATION
