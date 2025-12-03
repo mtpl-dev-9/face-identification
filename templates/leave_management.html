@@ -23,9 +23,40 @@
         <div class="card">
           <div class="card-header"><i class="fas fa-list"></i> Manage Leave Types</div>
           <div class="card-body">
-            <div class="input-group mb-3">
-              <input type="text" id="newLeaveType" class="form-control" placeholder="e.g., Casual Leave, Sick Leave">
-              <button class="btn btn-primary" onclick="addLeaveType()"><i class="fas fa-plus"></i> Add</button>
+            <div class="mb-3">
+              <input type="text" id="newLeaveType" class="form-control mb-2" placeholder="Leave Type Name (e.g., Casual Leave)">
+              
+              <div class="row mb-2">
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isPaid" checked>
+                    <label class="form-check-label" for="isPaid">Is Paid</label>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isEncashable">
+                    <label class="form-check-label" for="isEncashable">Encashable</label>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row mb-2">
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="requireApproval" checked>
+                    <label class="form-check-label" for="requireApproval">Require Approval</label>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="requireAttachment">
+                    <label class="form-check-label" for="requireAttachment">Require Attachment</label>
+                  </div>
+                </div>
+              </div>
+              
+              <button class="btn btn-primary w-100" onclick="addLeaveType()"><i class="fas fa-plus"></i> Add Leave Type</button>
             </div>
             <div id="leaveTypesList"></div>
           </div>
@@ -288,15 +319,23 @@ let approvers = [];
 let leaveRequests = [];
 
 async function loadLeaveTypes() {
-  const res = await fetch('/api/leave-types');
+  const res = await fetch('/api/leave-creation-form');
   const data = await res.json();
   leaveTypes = data.leave_types || [];
   
   const list = document.getElementById('leaveTypesList');
   list.innerHTML = leaveTypes.map(lt => `
-    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
-      <span><i class="fas fa-tag"></i> ${lt.name}</span>
-      <button class="btn btn-sm btn-danger" onclick="deleteLeaveType(${lt.id})"><i class="fas fa-trash"></i></button>
+    <div class="mb-2 p-2 border rounded">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <strong><i class="fas fa-tag"></i> ${lt.name}</strong>
+        <button class="btn btn-sm btn-danger" onclick="deleteLeaveType(${lt.id})"><i class="fas fa-trash"></i></button>
+      </div>
+      <div class="small text-muted">
+        ${lt.is_paid ? '<span class="badge bg-success">Paid</span>' : '<span class="badge bg-secondary">Unpaid</span>'}
+        ${lt.is_encashable ? '<span class="badge bg-info">Encashable</span>' : ''}
+        ${lt.require_approval ? '<span class="badge bg-warning text-dark">Needs Approval</span>' : ''}
+        ${lt.require_attachment ? '<span class="badge bg-primary">Needs Attachment</span>' : ''}
+      </div>
     </div>
   `).join('');
   
@@ -343,27 +382,48 @@ async function loadUsers() {
 
 async function addLeaveType() {
   const name = document.getElementById('newLeaveType').value.trim();
+  const is_paid = document.getElementById('isPaid').checked;
+  const is_encashable = document.getElementById('isEncashable').checked;
+  const require_approval = document.getElementById('requireApproval').checked;
+  const require_attachment = document.getElementById('requireAttachment').checked;
+  
   if (!name) return alert('Enter leave type name');
   
-  const res = await fetch('/api/leave-types', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name})
-  });
-  
-  const data = await res.json();
-  if (data.success) {
-    document.getElementById('newLeaveType').value = '';
-    loadLeaveTypes();
-  } else {
-    alert(data.error);
+  try {
+    const res = await fetch('/api/leave-creation-form', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name,
+        is_paid,
+        is_encashable,
+        require_approval,
+        require_attachment
+      })
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      alert('Leave type added successfully!');
+      document.getElementById('newLeaveType').value = '';
+      document.getElementById('isPaid').checked = true;
+      document.getElementById('isEncashable').checked = false;
+      document.getElementById('requireApproval').checked = true;
+      document.getElementById('requireAttachment').checked = false;
+      loadLeaveTypes();
+    } else {
+      alert(data.error);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error: ' + error.message);
   }
 }
 
 async function deleteLeaveType(id) {
   if (!confirm('Delete this leave type?')) return;
   
-  await fetch(`/api/leave-types/${id}`, {method: 'DELETE'});
+  await fetch(`/api/leave-creation-form/${id}`, {method: 'DELETE'});
   loadLeaveTypes();
 }
 

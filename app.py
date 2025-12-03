@@ -1151,7 +1151,7 @@ def create_app():
     def leave_management():
         return render_template("leave_management.html")
 
-    @app.route("/api/leave-types", methods=["GET"])
+    @app.route("/api/leave-creation-form", methods=["GET"])
     def api_get_leave_types():
         """
         Get All Leave Types
@@ -1166,43 +1166,54 @@ def create_app():
         leave_types = LeaveType.query.filter_by(leaveTypeIsActive=True).all()
         return jsonify({"success": True, "leave_types": [lt.to_dict() for lt in leave_types]})
 
-    @app.route("/api/leave-types", methods=["POST"])
+    @app.route("/api/leave-creation-form", methods=["POST"])
     def api_add_leave_type():
-        """
-        Create Leave Type
-        ---
-        tags:
-          - Leave Management
-        parameters:
-          - name: body
-            in: body
-            required: true
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-        responses:
-          200:
-            description: Leave type created
-        """
-        from models import LeaveType
-        data = request.get_json() or {}
-        name = data.get('name', '').strip()
-        
-        if not name:
-            return jsonify({"success": False, "error": "Leave type name required"}), 400
-        
-        if LeaveType.query.filter_by(leaveTypeName=name).first():
-            return jsonify({"success": False, "error": "Leave type already exists"}), 400
-        
-        leave_type = LeaveType(leaveTypeName=name)
-        db.session.add(leave_type)
-        db.session.commit()
-        
-        return jsonify({"success": True, "leave_type": leave_type.to_dict()})
+        try:
+            from models import LeaveType
+            data = request.get_json() or {}
+            name = data.get('name', '').strip()
+            is_paid = bool(data.get('is_paid', True))
+            is_encashable = bool(data.get('is_encashable', False))
+            require_approval = bool(data.get('require_approval', True))
+            require_attachment = bool(data.get('require_attachment', False))
+            
+            if not name:
+                return jsonify({"success": False, "error": "Leave type name required"}), 400
+            
+            existing = LeaveType.query.filter_by(leaveTypeName=name).first()
+            if existing:
+                if existing.leaveTypeIsActive:
+                    return jsonify({"success": False, "error": "Leave creation form already exists"}), 400
+                existing.leaveTypeIsActive = True
+                existing.leaveTypeIsPaid = is_paid
+                existing.leaveTypeIsEncashable = is_encashable
+                existing.leaveTypeRequireApproval = require_approval
+                existing.leaveTypeRequireAttachment = require_attachment
+                db.session.commit()
+                return jsonify({"success": True, "leave_type": existing.to_dict()})
+            
+            leave_type = LeaveType(
+                leaveTypeName=name,
+                leaveTypeIsPaid=is_paid,
+                leaveTypeIsEncashable=is_encashable,
+                leaveTypeRequireApproval=require_approval,
+                leaveTypeRequireAttachment=require_attachment
+            )
+            db.session.add(leave_type)
+            db.session.commit()
+            db.session.refresh(leave_type)
+            
+            print(f"DEBUG: Saved leave type ID={leave_type.leaveTypeId}, Name={leave_type.leaveTypeName}")
+            
+            return jsonify({"success": True, "leave_type": leave_type.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            print(f"ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e)}), 500
 
-    @app.route("/api/leave-types/<int:leave_type_id>", methods=["DELETE"])
+    @app.route("/api/leave-creation-form/<int:leave_type_id>", methods=["DELETE"])
     def api_delete_leave_type(leave_type_id):
         """
         Delete Leave Type
@@ -1816,14 +1827,9 @@ def create_app():
             allotmentAssignedBy=assigned_by
         )
         db.session.add(allotment)
-        db.session.flush()
         db.session.commit()
-        db.session.refresh(allotment)
         
-        # Force write with raw SQL to ensure it's in database
-        db.session.execute(db.text("SELECT 1"))
-        
-      #  return jsonify({"success": True, "allotment": allotment.to_dict()})
+        return jsonify({"success": True, "allotment": allotment.to_dict()})
 
     @app.route("/api/leave-allotments/bulk", methods=["POST"])
     def api_create_bulk_leave_allotment():
