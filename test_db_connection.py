@@ -3,17 +3,22 @@ Database Connection Test Script
 Run this to verify your MySQL connection is working
 """
 import sys
+import os
 from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
-# Update these values to match your server
-DB_USER = "root"
-DB_PASSWORD = ""  # Add your password here
-DB_HOST = "localhost"
-DB_PORT = "3306"
-DB_NAME = "mtpl_website"
+# Load from .env file
+load_dotenv('.env')
+DB_USER = os.environ.get("DB_USER", "root")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+DB_PORT = os.environ.get("DB_PORT", "3306")
+DB_NAME = os.environ.get("DB_NAME", "mtpl_website")
 
-# Build connection string
-connection_string = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# Build connection string with URL encoding
+DB_PASSWORD_ENCODED = quote_plus(DB_PASSWORD)
+connection_string = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD_ENCODED}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 print("=" * 60)
 print("MySQL Connection Test")

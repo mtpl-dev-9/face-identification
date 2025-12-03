@@ -1,0 +1,107 @@
+# Add these routes to app.py after the leave management routes
+
+    @app.route("/api/leave-allotments", methods=["GET"])
+    def api_get_leave_allotments():
+        """Get Leave Allotments"""
+        user_id = request.args.get('user_id', type=int)
+        year = request.args.get('year', get_ist_now().year, type=int)
+        
+        query = LeaveAllotment.query
+        if user_id:
+            query = query.filter_by(allotmentUserId=user_id)
+        if year:
+            query = query.filter_by(allotmentYear=year)
+        
+        allotments = query.order_by(LeaveAllotment.allotmentAssignedAt.desc()).all()
+        return jsonify({"success": True, "allotments": [a.to_dict() for a in allotments]})
+
+    @app.route("/api/leave-allotments", methods=["POST"])
+    def api_create_leave_allotment():
+        """Create Leave Allotment"""
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        assigned_by = data.get('assigned_by')
+        
+        if not user_id or not leave_type_id:
+            return jsonify({"success": False, "error": "user_id and leave_type_id required"}), 400
+        
+        # Check if allotment already exists
+        existing = LeaveAllotment.query.filter_by(
+            allotmentUserId=user_id,
+            allotmentLeaveTypeId=leave_type_id,
+            allotmentYear=year
+        ).first()
+        
+        if existing:
+            existing.allotmentTotal = total
+            existing.allotmentAssignedBy = assigned_by
+            existing.allotmentUpdatedAt = get_ist_now()
+            db.session.commit()
+            return jsonify({"success": True, "allotment": existing.to_dict()})
+        
+        allotment = LeaveAllotment(
+            allotmentUserId=user_id,
+            allotmentLeaveTypeId=leave_type_id,
+            allotmentTotal=total,
+            allotmentYear=year,
+            allotmentAssignedBy=assigned_by
+        )
+        db.session.add(allotment)
+        db.session.commit()
+        
+        return jsonify({"success": True, "allotment": allotment.to_dict()})
+
+    @app.route("/api/leave-allotments/bulk", methods=["POST"])
+    def api_create_bulk_leave_allotment():
+        """Bulk Create Leave Allotments"""
+        data = request.get_json() or {}
+        user_ids = data.get('user_ids', [])
+        leave_type_id = data.get('leave_type_id')
+        total = data.get('total', 0)
+        year = data.get('year', get_ist_now().year)
+        assigned_by = data.get('assigned_by')
+        
+        if not user_ids or not leave_type_id:
+            return jsonify({"success": False, "error": "user_ids and leave_type_id required"}), 400
+        
+        results = []
+        for user_id in user_ids:
+            existing = LeaveAllotment.query.filter_by(
+                allotmentUserId=user_id,
+                allotmentLeaveTypeId=leave_type_id,
+                allotmentYear=year
+            ).first()
+            
+            if existing:
+                existing.allotmentTotal = total
+                existing.allotmentAssignedBy = assigned_by
+                existing.allotmentUpdatedAt = get_ist_now()
+                results.append(existing)
+            else:
+                allotment = LeaveAllotment(
+                    allotmentUserId=user_id,
+                    allotmentLeaveTypeId=leave_type_id,
+                    allotmentTotal=total,
+                    allotmentYear=year,
+                    allotmentAssignedBy=assigned_by
+                )
+                db.session.add(allotment)
+                results.append(allotment)
+        
+        db.session.commit()
+        return jsonify({"success": True, "count": len(results), "allotments": [a.to_dict() for a in results]})
+
+    @app.route("/api/leave-allotments/<int:allotment_id>", methods=["DELETE"])
+    def api_delete_leave_allotment(allotment_id):
+        """Delete Leave Allotment"""
+        allotment = LeaveAllotment.query.get(allotment_id)
+        if not allotment:
+            return jsonify({"success": False, "error": "Allotment not found"}), 404
+        
+        db.session.delete(allotment)
+        db.session.commit()
+        
+        return jsonify({"success": True})

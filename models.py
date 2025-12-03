@@ -85,13 +85,18 @@ class Person(db.Model):
 
     def to_dict(self):
         user = User.query.filter_by(userId=self.biometricUserId).first()
-        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.biometricUserId)
+        if user and user.userFirstName and user.userLastName:
+            user_name = f"{user.userFirstName} {user.userLastName}".strip()
+            employee_code = user.userLogin if user.userLogin else str(self.biometricUserId)
+        else:
+            user_name = f"User {self.biometricUserId}"
+            employee_code = str(self.biometricUserId)
         
         return {
             "id": self.biometricId,
             "user_id": self.biometricUserId,
             "name": user_name,
-            "employee_code": str(self.biometricUserId),
+            "employee_code": employee_code,
             "created_at": self.biometricCreatedAt.isoformat() + "Z" if self.biometricCreatedAt else None,
             "is_active": self.biometricIsActive,
         }
@@ -150,6 +155,127 @@ class Holiday(db.Model):
         }
 
 
+class LeaveType(db.Model):
+    __tablename__ = "mtpl_leave_types"
+
+    leaveTypeId = db.Column('leaveTypeId', db.Integer, primary_key=True)
+    leaveTypeName = db.Column('leaveTypeName', db.String(50), unique=True, nullable=False)
+    leaveTypeIsActive = db.Column('leaveTypeIsActive', db.Boolean, default=True)
+    leaveTypeCreatedAt = db.Column('leaveTypeCreatedAt', db.DateTime, default=get_ist_now)
+
+    def to_dict(self):
+        return {
+            "id": self.leaveTypeId,
+            "name": self.leaveTypeName,
+            "is_active": self.leaveTypeIsActive,
+            "created_at": self.leaveTypeCreatedAt.isoformat() + "Z"
+        }
+
+
+class UserLeaveBalance(db.Model):
+    __tablename__ = "mtpl_user_leave_balance"
+
+    balanceId = db.Column('balanceId', db.Integer, primary_key=True)
+    balanceUserId = db.Column('balanceUserId', db.Integer, nullable=False, index=True)
+    balanceLeaveTypeId = db.Column('balanceLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
+    balanceTotal = db.Column('balanceTotal', db.Integer, default=0)
+    balanceUsed = db.Column('balanceUsed', db.Integer, default=0)
+    balanceYear = db.Column('balanceYear', db.Integer, nullable=False, index=True)
+    balanceUpdatedAt = db.Column('balanceUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    leave_type = db.relationship('LeaveType', backref='balances')
+
+    @property
+    def remaining(self):
+        return self.balanceTotal - self.balanceUsed
+
+    def to_dict(self):
+        return {
+            "id": self.balanceId,
+            "user_id": self.balanceUserId,
+            "leave_type_id": self.balanceLeaveTypeId,
+            "leave_type_name": self.leave_type.leaveTypeName,
+            "total": self.balanceTotal,
+            "used": self.balanceUsed,
+            "remaining": self.remaining,
+            "year": self.balanceYear
+        }
+
+
+class LeaveAllotment(db.Model):
+    __tablename__ = "mtpl_leave_allotment"
+
+    allotmentId = db.Column('allotmentId', db.Integer, primary_key=True)
+    allotmentUserId = db.Column('allotmentUserId', db.Integer, nullable=False, index=True)
+    allotmentLeaveTypeId = db.Column('allotmentLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
+    allotmentTotal = db.Column('allotmentTotal', db.Numeric(5, 1), nullable=False, default=0)
+    allotmentYear = db.Column('allotmentYear', db.Integer, nullable=False, index=True)
+    allotmentAssignedBy = db.Column('allotmentAssignedBy', db.Integer, nullable=True)
+    allotmentAssignedAt = db.Column('allotmentAssignedAt', db.DateTime, default=get_ist_now)
+    allotmentUpdatedAt = db.Column('allotmentUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    leave_type = db.relationship('LeaveType', backref='allotments')
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.allotmentUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.allotmentUserId)
+        
+        assigned_by_user = User.query.filter_by(userId=self.allotmentAssignedBy).first() if self.allotmentAssignedBy else None
+        assigned_by_name = f"{assigned_by_user.userFirstName} {assigned_by_user.userLastName}" if assigned_by_user else None
+        
+        return {
+            "id": self.allotmentId,
+            "user_id": self.allotmentUserId,
+            "user_name": user_name,
+            "leave_type_id": self.allotmentLeaveTypeId,
+            "leave_type_name": self.leave_type.leaveTypeName,
+            "total": float(self.allotmentTotal),
+            "year": self.allotmentYear,
+            "assigned_by": self.allotmentAssignedBy,
+            "assigned_by_name": assigned_by_name,
+            "assigned_at": self.allotmentAssignedAt.isoformat() + "Z" if self.allotmentAssignedAt else None,
+            "updated_at": self.allotmentUpdatedAt.isoformat() + "Z" if self.allotmentUpdatedAt else None
+        }
+
+
+class LeaveRequest(db.Model):
+    __tablename__ = "mtpl_leave_requests"
+
+    leaveRequestId = db.Column('leaveRequestId', db.Integer, primary_key=True)
+    leaveRequestUserId = db.Column('leaveRequestUserId', db.Integer, nullable=False, index=True)
+    leaveRequestLeaveTypeId = db.Column('leaveRequestLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
+    leaveRequestFromDate = db.Column('leaveRequestFromDate', db.Date, nullable=False)
+    leaveRequestToDate = db.Column('leaveRequestToDate', db.Date, nullable=False)
+    leaveRequestDays = db.Column('leaveRequestDays', db.Integer, nullable=False)
+    leaveRequestReason = db.Column('leaveRequestReason', db.Text)
+    leaveRequestStatus = db.Column('leaveRequestStatus', db.String(20), default='pending')  # pending, approved, rejected
+    leaveRequestApprovedBy = db.Column('leaveRequestApprovedBy', db.Integer, nullable=True)
+    leaveRequestApprovedAt = db.Column('leaveRequestApprovedAt', db.DateTime, nullable=True)
+    leaveRequestCreatedAt = db.Column('leaveRequestCreatedAt', db.DateTime, default=get_ist_now)
+
+    leave_type = db.relationship('LeaveType', backref='requests')
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.leaveRequestUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.leaveRequestUserId)
+        
+        return {
+            "id": self.leaveRequestId,
+            "user_id": self.leaveRequestUserId,
+            "user_name": user_name,
+            "leave_type_id": self.leaveRequestLeaveTypeId,
+            "leave_type_name": self.leave_type.leaveTypeName,
+            "from_date": self.leaveRequestFromDate.isoformat(),
+            "to_date": self.leaveRequestToDate.isoformat(),
+            "days": self.leaveRequestDays,
+            "reason": self.leaveRequestReason,
+            "status": self.leaveRequestStatus,
+            "approved_by": self.leaveRequestApprovedBy,
+            "approved_at": self.leaveRequestApprovedAt.isoformat() + "Z" if self.leaveRequestApprovedAt else None,
+            "created_at": self.leaveRequestCreatedAt.isoformat() + "Z"
+        }
+
+
 class Attendance(db.Model):
     __tablename__ = "mtpl_attendance"
 
@@ -198,6 +324,10 @@ class Attendance(db.Model):
     @property
     def action(self):
         return self.attendanceAction
+    
+    @property
+    def person(self):
+        return Person.query.filter_by(biometricUserId=self.attendanceUserId).first()
     
     def to_dict(self):
         user = User.query.filter_by(userId=self.attendanceUserId).first()
