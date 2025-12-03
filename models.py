@@ -284,6 +284,59 @@ class LeaveRequest(db.Model):
         }
 
 
+class MonthlyReport(db.Model):
+    __tablename__ = "mtpl_monthly_reports"
+
+    reportId = db.Column('reportId', db.Integer, primary_key=True)
+    reportUserId = db.Column('reportUserId', db.Integer, nullable=False, index=True)
+    reportMonth = db.Column('reportMonth', db.Integer, nullable=False)
+    reportYear = db.Column('reportYear', db.Integer, nullable=False)
+    reportTotalWorkingHours = db.Column('reportTotalWorkingHours', db.Numeric(10, 2), default=0)
+    reportWorkedDays = db.Column('reportWorkedDays', db.Integer, default=0)
+    reportTotalWeeklyOff = db.Column('reportTotalWeeklyOff', db.Integer, default=0)
+    reportHolidays = db.Column('reportHolidays', db.Integer, default=0)
+    reportLeavesTaken = db.Column('reportLeavesTaken', db.Numeric(5, 1), default=0)
+    reportLeaveDetails = db.Column('reportLeaveDetails', db.Text, nullable=True)
+    reportOnTimeEntries = db.Column('reportOnTimeEntries', db.Integer, default=0)
+    reportEarlyOut = db.Column('reportEarlyOut', db.Integer, default=0)
+    reportLateIn = db.Column('reportLateIn', db.Integer, default=0)
+    reportAbsentDays = db.Column('reportAbsentDays', db.Integer, default=0)
+    reportGeneratedAt = db.Column('reportGeneratedAt', db.DateTime, default=get_ist_now)
+    reportUpdatedAt = db.Column('reportUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    def to_dict(self):
+        import json
+        user = User.query.filter_by(userId=self.reportUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.reportUserId)
+        
+        leave_details = []
+        if self.reportLeaveDetails:
+            try:
+                leave_details = json.loads(self.reportLeaveDetails)
+            except:
+                leave_details = []
+        
+        return {
+            "id": self.reportId,
+            "user_id": self.reportUserId,
+            "user_name": user_name,
+            "month": self.reportMonth,
+            "year": self.reportYear,
+            "total_working_hours": float(self.reportTotalWorkingHours),
+            "worked_days": self.reportWorkedDays,
+            "total_weekly_off": self.reportTotalWeeklyOff,
+            "holidays": self.reportHolidays,
+            "leaves_taken": float(self.reportLeavesTaken),
+            "leave_details": leave_details,
+            "on_time_entries": self.reportOnTimeEntries,
+            "early_out": self.reportEarlyOut,
+            "late_in": self.reportLateIn,
+            "absent_days": self.reportAbsentDays,
+            "generated_at": self.reportGeneratedAt.isoformat() + "Z" if self.reportGeneratedAt else None,
+            "updated_at": self.reportUpdatedAt.isoformat() + "Z" if self.reportUpdatedAt else None
+        }
+
+
 class Attendance(db.Model):
     __tablename__ = "mtpl_attendance"
 
