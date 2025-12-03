@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from database import db
 from sqlalchemy import and_
 import pytz
@@ -358,4 +358,99 @@ class Attendance(db.Model):
             "clock_out_time": self.attendanceClockOutTime.isoformat() + "Z" if self.attendanceClockOutTime else None,
             "break_in_time": self.attendanceBreakInTime.isoformat() + "Z" if self.attendanceBreakInTime else None,
             "break_out_time": self.attendanceBreakOutTime.isoformat() + "Z" if self.attendanceBreakOutTime else None,
+        }
+
+
+class ManualTimeEntry(db.Model):
+    __tablename__ = "mtpl_manual_time_entries"
+
+    entryId = db.Column('entryId', db.Integer, primary_key=True)
+    entryUserId = db.Column('entryUserId', db.Integer, nullable=False, index=True)
+    entryWorkingDate = db.Column('entryWorkingDate', db.Date, nullable=False, index=True)
+    entryCheckInTime = db.Column('entryCheckInTime', db.Time, nullable=True)
+    entryCheckOutTime = db.Column('entryCheckOutTime', db.Time, nullable=True)
+    entryBreakInTime = db.Column('entryBreakInTime', db.Time, nullable=True)
+    entryBreakOutTime = db.Column('entryBreakOutTime', db.Time, nullable=True)
+    entryCreatedAt = db.Column('entryCreatedAt', db.DateTime, default=get_ist_now)
+    entryUpdatedAt = db.Column('entryUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+    entryCreatedBy = db.Column('entryCreatedBy', db.Integer, nullable=True)  # Admin user ID who created this entry
+
+    @property
+    def id(self):
+        return self.entryId
+    
+    @property
+    def user_id(self):
+        return self.entryUserId
+    
+    @property
+    def working_date(self):
+        return self.entryWorkingDate
+    
+    @property
+    def check_in_time(self):
+        return self.entryCheckInTime
+    
+    @property
+    def check_out_time(self):
+        return self.entryCheckOutTime
+    
+    @property
+    def break_in_time(self):
+        return self.entryBreakInTime
+    
+    @property
+    def break_out_time(self):
+        return self.entryBreakOutTime
+
+    def calculate_work_hours(self):
+        """Calculate total work hours excluding break time"""
+        if not self.entryCheckInTime or not self.entryCheckOutTime:
+            return None
+        
+        # Convert times to datetime for calculation
+        check_in = datetime.combine(self.entryWorkingDate, self.entryCheckInTime)
+        check_out = datetime.combine(self.entryWorkingDate, self.entryCheckOutTime)
+        
+        # Handle case where check-out is next day
+        if check_out < check_in:
+            check_out += timedelta(days=1)
+        
+        total_time = check_out - check_in
+        
+        # Subtract break time if both break-in and break-out are present
+        if self.entryBreakInTime and self.entryBreakOutTime:
+            break_in = datetime.combine(self.entryWorkingDate, self.entryBreakInTime)
+            break_out = datetime.combine(self.entryWorkingDate, self.entryBreakOutTime)
+            
+            # Handle case where break-out is next day
+            if break_out < break_in:
+                break_out += timedelta(days=1)
+            
+            break_duration = break_out - break_in
+            total_time -= break_duration
+        
+        return total_time.total_seconds() / 3600  # Return hours as float
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.entryUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.entryUserId)
+        employee_code = user.userLogin if user else str(self.entryUserId)
+        
+        work_hours = self.calculate_work_hours()
+        
+        return {
+            "id": self.entryId,
+            "user_id": self.entryUserId,
+            "user_name": user_name,
+            "employee_code": employee_code,
+            "working_date": self.entryWorkingDate.isoformat(),
+            "check_in_time": self.entryCheckInTime.strftime('%H:%M:%S') if self.entryCheckInTime else None,
+            "check_out_time": self.entryCheckOutTime.strftime('%H:%M:%S') if self.entryCheckOutTime else None,
+            "break_in_time": self.entryBreakInTime.strftime('%H:%M:%S') if self.entryBreakInTime else None,
+            "break_out_time": self.entryBreakOutTime.strftime('%H:%M:%S') if self.entryBreakOutTime else None,
+            "work_hours": round(work_hours, 2) if work_hours is not None else None,
+            "created_at": self.entryCreatedAt.isoformat() + "Z" if self.entryCreatedAt else None,
+            "updated_at": self.entryUpdatedAt.isoformat() + "Z" if self.entryUpdatedAt else None,
+            "created_by": self.entryCreatedBy
         }
