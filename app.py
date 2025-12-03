@@ -21,7 +21,7 @@ load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, ManualTimeEntry
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport
 from multilevel_models import LeaveApprover, LeaveApproval
 from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
@@ -49,23 +49,15 @@ def get_allowed_ips():
 def get_ist_now():
     """Get current time in IST"""
     return dt.now(IST)
-
-# Import face recognition utilities (optional - only needed for face recognition features)
-try:
-    from face_utils import (
-        load_image_from_file_storage,
-        load_image_from_base64,
-        get_face_encodings,
-        encode_to_json,
-        decode_from_json,
-        check_face_exists,
-    )
-    import face_recognition
-    FACE_RECOGNITION_AVAILABLE = True
-except ImportError as e:
-    FACE_RECOGNITION_AVAILABLE = False
-    print(f"Warning: Face recognition modules not available: {e}")
-    print("Manual time entry and other non-face-recognition features will still work.")
+from face_utils import (
+    load_image_from_file_storage,
+    load_image_from_base64,
+    get_face_encodings,
+    encode_to_json,
+    decode_from_json,
+    check_face_exists,
+)
+import face_recognition
 
 
 def create_app():
@@ -223,8 +215,6 @@ def create_app():
 
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
-        if not FACE_RECOGNITION_AVAILABLE:
-            return None, None
         persons: List[Person] = Person.query.filter_by(biometricIsActive=True).all()
         if not persons:
             return None, None
@@ -1223,6 +1213,58 @@ def create_app():
             traceback.print_exc()
             return jsonify({"success": False, "error": str(e)}), 500
 
+    @app.route("/api/leave-creation-form/<int:leave_type_id>", methods=["PUT"])
+    def api_update_leave_type(leave_type_id):
+        """
+        Update Leave Type
+        ---
+        tags:
+          - Leave Management
+        parameters:
+          - name: leave_type_id
+            in: path
+            type: integer
+            required: true
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                is_paid:
+                  type: boolean
+                is_encashable:
+                  type: boolean
+                require_approval:
+                  type: boolean
+                require_attachment:
+                  type: boolean
+        responses:
+          200:
+            description: Leave type updated
+        """
+        from models import LeaveType
+        leave_type = LeaveType.query.get(leave_type_id)
+        if not leave_type:
+            return jsonify({"success": False, "error": "Leave type not found"}), 404
+        
+        data = request.get_json() or {}
+        if 'name' in data:
+            leave_type.leaveTypeName = data['name'].strip()
+        if 'is_paid' in data:
+            leave_type.leaveTypeIsPaid = bool(data['is_paid'])
+        if 'is_encashable' in data:
+            leave_type.leaveTypeIsEncashable = bool(data['is_encashable'])
+        if 'require_approval' in data:
+            leave_type.leaveTypeRequireApproval = bool(data['require_approval'])
+        if 'require_attachment' in data:
+            leave_type.leaveTypeRequireAttachment = bool(data['require_attachment'])
+        
+        db.session.commit()
+        return jsonify({"success": True, "leave_type": leave_type.to_dict()})
+
     @app.route("/api/leave-creation-form/<int:leave_type_id>", methods=["DELETE"])
     def api_delete_leave_type(leave_type_id):
         """
@@ -1633,14 +1675,25 @@ def create_app():
             days = float(base_days)
         year = from_date.year
         
-        balance = UserLeaveBalance.query.filter_by(
-            balanceUserId=user_id,
-            balanceLeaveTypeId=leave_type_id,
-            balanceYear=year
+        allotment = LeaveAllotment.query.filter_by(
+            allotmentUserId=user_id,
+            allotmentLeaveTypeId=leave_type_id,
+            allotmentYear=year
         ).first()
         
-        if not balance or balance.remaining < days:
-            return jsonify({"success": False, "error": "Insufficient leave balance"}), 400
+        if not allotment:
+            return jsonify({"success": False, "error": "No leave allotment found"}), 400
+        
+        used_leaves = db.session.query(func.sum(LeaveRequest.leaveRequestDays)).filter(
+            LeaveRequest.leaveRequestUserId == user_id,
+            LeaveRequest.leaveRequestLeaveTypeId == leave_type_id,
+            LeaveRequest.leaveRequestStatus == 'approved',
+            func.extract('year', LeaveRequest.leaveRequestFromDate) == year
+        ).scalar() or 0
+        
+        remaining = float(allotment.allotmentTotal) - float(used_leaves)
+        if remaining < days:
+            return jsonify({"success": False, "error": f"Insufficient leave balance. Available: {remaining}, Requested: {days}"}), 400
         
         leave_request = LeaveRequest(
             leaveRequestUserId=user_id,
@@ -1689,19 +1742,9 @@ def create_app():
         if leave_request.leaveRequestStatus != 'pending':
             return jsonify({"success": False, "error": "Request already processed"}), 400
         
-        balance = UserLeaveBalance.query.filter_by(
-            balanceUserId=leave_request.leaveRequestUserId,
-            balanceLeaveTypeId=leave_request.leaveRequestLeaveTypeId,
-            balanceYear=leave_request.leaveRequestFromDate.year
-        ).first()
-        
-        if not balance or balance.remaining < leave_request.leaveRequestDays:
-            return jsonify({"success": False, "error": "Insufficient leave balance"}), 400
-        
         leave_request.leaveRequestStatus = 'approved'
         leave_request.leaveRequestApprovedBy = approved_by
         leave_request.leaveRequestApprovedAt = get_ist_now()
-        balance.balanceUsed += leave_request.leaveRequestDays
         
         db.session.commit()
         return jsonify({"success": True, "request": leave_request.to_dict()})
@@ -1764,8 +1807,9 @@ def create_app():
             type: integer
         responses:
           200:
-            description: List of leave allotments
+            description: List of leave allotments with used/remaining
         """
+        from models import LeaveRequest
         user_id = request.args.get('user_id', type=int)
         year = request.args.get('year', get_ist_now().year, type=int)
         
@@ -1776,7 +1820,19 @@ def create_app():
             query = query.filter_by(allotmentYear=year)
         
         allotments = query.order_by(LeaveAllotment.allotmentAssignedAt.desc()).all()
-        return jsonify({"success": True, "allotments": [a.to_dict() for a in allotments]})
+        result = []
+        for a in allotments:
+            used = db.session.query(func.sum(LeaveRequest.leaveRequestDays)).filter(
+                LeaveRequest.leaveRequestUserId == a.allotmentUserId,
+                LeaveRequest.leaveRequestLeaveTypeId == a.allotmentLeaveTypeId,
+                LeaveRequest.leaveRequestStatus == 'approved',
+                func.extract('year', LeaveRequest.leaveRequestFromDate) == a.allotmentYear
+            ).scalar() or 0
+            data = a.to_dict()
+            data['used'] = float(used)
+            data['remaining'] = float(a.allotmentTotal) - float(used)
+            result.append(data)
+        return jsonify({"success": True, "allotments": result})
 
     @app.route("/api/leave-allotments", methods=["POST"])
     def api_create_leave_allotment():
@@ -2022,275 +2078,193 @@ def create_app():
         db.session.commit()
         return jsonify({"success": True, "count": count, "users": len(users)})
 
-    # --- Manual Time Entry Management ---
-    @app.route("/manual-time-entry")
-    def manual_time_entry_view():
-        return render_template("manual_time_entry.html")
-
-    @app.route("/api/manual-time-entries", methods=["GET"])
-    def api_get_manual_time_entries():
+    @app.route("/api/attendance/monthly-report", methods=["GET"])
+    def api_monthly_attendance_report():
         """
-        Get Manual Time Entries
+        Generate Monthly Attendance Report
         ---
         tags:
-          - Manual Time Entry
+          - Reports
         parameters:
           - name: user_id
             in: query
             type: integer
-          - name: start_date
-            in: query
-            type: string
-            format: date
-          - name: end_date
-            in: query
-            type: string
-            format: date
-        responses:
-          200:
-            description: List of manual time entries
-        """
-        try:
-            user_id = request.args.get('user_id', type=int)
-            start_date_str = request.args.get('start_date')
-            end_date_str = request.args.get('end_date')
-            
-            query = ManualTimeEntry.query
-            
-            if user_id:
-                query = query.filter_by(entryUserId=user_id)
-            
-            if start_date_str:
-                try:
-                    start_date = dt.strptime(start_date_str, '%Y-%m-%d').date()
-                    query = query.filter(ManualTimeEntry.entryWorkingDate >= start_date)
-                except ValueError:
-                    pass
-            
-            if end_date_str:
-                try:
-                    end_date = dt.strptime(end_date_str, '%Y-%m-%d').date()
-                    query = query.filter(ManualTimeEntry.entryWorkingDate <= end_date)
-                except ValueError:
-                    pass
-            
-            entries = query.order_by(ManualTimeEntry.entryWorkingDate.desc(), ManualTimeEntry.entryCreatedAt.desc()).all()
-            return jsonify({"success": True, "entries": [e.to_dict() for e in entries]})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    @app.route("/api/manual-time-entries", methods=["POST"])
-    def api_create_manual_time_entry():
-        """
-        Create or Update Manual Time Entry
-        ---
-        tags:
-          - Manual Time Entry
-        parameters:
-          - name: body
-            in: body
             required: true
-            schema:
-              type: object
-              properties:
-                user_id:
-                  type: integer
-                working_date:
-                  type: string
-                  format: date
-                check_in_time:
-                  type: string
-                  format: time
-                check_out_time:
-                  type: string
-                  format: time
-                break_in_time:
-                  type: string
-                  format: time
-                break_out_time:
-                  type: string
-                  format: time
-                created_by:
-                  type: integer
-        responses:
-          200:
-            description: Manual time entry created or updated
-        """
-        try:
-            data = request.get_json() or {}
-            user_id = data.get('user_id')
-            working_date_str = data.get('working_date')
-            check_in_time_str = data.get('check_in_time')
-            check_out_time_str = data.get('check_out_time')
-            break_in_time_str = data.get('break_in_time')
-            break_out_time_str = data.get('break_out_time')
-            created_by = data.get('created_by')
-
-            if not user_id or not working_date_str:
-                return jsonify({"success": False, "error": "user_id and working_date are required"}), 400
-
-            # NOTE: Do not hard-fail if user record is missing; allow manual entries
-            # This makes the feature usable even if mtpl_users is not fully populated.
-
-            # Parse working date
-            try:
-                working_date = dt.strptime(working_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
-
-            # Helper to parse time strings (accepts HH:MM or HH:MM:SS)
-            def parse_time(time_str):
-                if not time_str:
-                    return None
-                for fmt in ('%H:%M:%S', '%H:%M'):
-                    try:
-                        return dt.strptime(time_str, fmt).time()
-                    except ValueError:
-                        continue
-                return None
-
-            check_in_time = parse_time(check_in_time_str) if check_in_time_str else None
-            check_out_time = parse_time(check_out_time_str) if check_out_time_str else None
-            break_in_time = parse_time(break_in_time_str) if break_in_time_str else None
-            break_out_time = parse_time(break_out_time_str) if break_out_time_str else None
-
-            # Upsert: if an entry already exists for this user/date, update it instead of erroring
-            entry = ManualTimeEntry.query.filter_by(
-                entryUserId=user_id,
-                entryWorkingDate=working_date
-            ).first()
-
-            if entry:
-                # Update existing entry times
-                entry.entryCheckInTime = check_in_time
-                entry.entryCheckOutTime = check_out_time
-                entry.entryBreakInTime = break_in_time
-                entry.entryBreakOutTime = break_out_time
-
-                # If a creator is provided, (back)fill or update the creator info
-                if created_by is not None:
-                    entry.entryCreatedBy = created_by
-            else:
-                # Create a brand new manual time entry, including who created it
-                entry = ManualTimeEntry(
-                    entryUserId=user_id,
-                    entryWorkingDate=working_date,
-                    entryCheckInTime=check_in_time,
-                    entryCheckOutTime=check_out_time,
-                    entryBreakInTime=break_in_time,
-                    entryBreakOutTime=break_out_time,
-                    entryCreatedBy=created_by
-                )
-                db.session.add(entry)
-
-            db.session.commit()
-
-            return jsonify({"success": True, "entry": entry.to_dict()})
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    @app.route("/api/manual-time-entries/<int:entry_id>", methods=["PUT"])
-    def api_update_manual_time_entry(entry_id):
-        """
-        Update Manual Time Entry
-        ---
-        tags:
-          - Manual Time Entry
-        parameters:
-          - name: entry_id
-            in: path
+            description: User ID
+          - name: month
+            in: query
             type: integer
             required: true
-          - name: body
-            in: body
-            required: true
-            schema:
-              type: object
-              properties:
-                check_in_time:
-                  type: string
-                  format: time
-                check_out_time:
-                  type: string
-                  format: time
-                break_in_time:
-                  type: string
-                  format: time
-                break_out_time:
-                  type: string
-                  format: time
-        responses:
-          200:
-            description: Manual time entry updated
-        """
-        try:
-            entry = ManualTimeEntry.query.get(entry_id)
-            if not entry:
-                return jsonify({"success": False, "error": "Entry not found"}), 404
-            
-            data = request.get_json() or {}
-            
-            def parse_time(time_str):
-                if not time_str:
-                    return None
-                try:
-                    return dt.strptime(time_str, '%H:%M:%S').time()
-                except ValueError:
-                    try:
-                        return dt.strptime(time_str, '%H:%M').time()
-                    except ValueError:
-                        return None
-            
-            if 'check_in_time' in data:
-                entry.entryCheckInTime = parse_time(data.get('check_in_time'))
-            if 'check_out_time' in data:
-                entry.entryCheckOutTime = parse_time(data.get('check_out_time'))
-            if 'break_in_time' in data:
-                entry.entryBreakInTime = parse_time(data.get('break_in_time'))
-            if 'break_out_time' in data:
-                entry.entryBreakOutTime = parse_time(data.get('break_out_time'))
-            
-            # Validate times
-            if entry.entryCheckInTime and entry.entryCheckOutTime and entry.entryCheckInTime >= entry.entryCheckOutTime:
-                return jsonify({"success": False, "error": "Check-out time must be after check-in time"}), 400
-            
-            if entry.entryBreakInTime and entry.entryBreakOutTime and entry.entryBreakInTime >= entry.entryBreakOutTime:
-                return jsonify({"success": False, "error": "Break-out time must be after break-in time"}), 400
-            
-            db.session.commit()
-            return jsonify({"success": True, "entry": entry.to_dict()})
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    @app.route("/api/manual-time-entries/<int:entry_id>", methods=["DELETE"])
-    def api_delete_manual_time_entry(entry_id):
-        """
-        Delete Manual Time Entry
-        ---
-        tags:
-          - Manual Time Entry
-        parameters:
-          - name: entry_id
-            in: path
+            description: Month (1-12)
+          - name: year
+            in: query
             type: integer
             required: true
+            description: Year
         responses:
           200:
-            description: Manual time entry deleted
+            description: Monthly report generated and saved
         """
-        try:
-            entry = ManualTimeEntry.query.get(entry_id)
-            if not entry:
-                return jsonify({"success": False, "error": "Entry not found"}), 404
+        from models import LeaveRequest
+        from calendar import monthrange
+        
+        user_id = request.args.get('user_id', type=int)
+        month = request.args.get('month', type=int)
+        year = request.args.get('year', type=int)
+        
+        if not user_id or not month or not year:
+            return jsonify({"success": False, "error": "user_id, month, year required"}), 400
+        
+        month_start = dt(year, month, 1, tzinfo=IST)
+        days_in_month = monthrange(year, month)[1]
+        month_end = dt(year, month, days_in_month, 23, 59, 59, tzinfo=IST)
+        
+        records = Attendance.query.filter(
+            Attendance.attendanceUserId == user_id,
+            Attendance.attendanceTimestamp >= month_start,
+            Attendance.attendanceTimestamp <= month_end,
+            Attendance.attendanceClockInTime.isnot(None)
+        ).all()
+        
+        holidays = Holiday.query.filter(
+            func.extract('year', Holiday.holidayDate) == year,
+            func.extract('month', Holiday.holidayDate) == month
+        ).all()
+        holiday_dates = {h.holidayDate for h in holidays}
+        weekoff_dates = {h.holidayDate for h in holidays if h.holidayIsWeekoff}
+        
+        leaves = LeaveRequest.query.filter(
+            LeaveRequest.leaveRequestUserId == user_id,
+            LeaveRequest.leaveRequestStatus == 'approved',
+            LeaveRequest.leaveRequestFromDate <= month_end.date(),
+            LeaveRequest.leaveRequestToDate >= month_start.date()
+        ).all()
+        leave_days = sum(l.leaveRequestDays for l in leaves)
+        
+        # Group leaves by type
+        leave_summary = {}
+        for l in leaves:
+            lt = LeaveType.query.get(l.leaveRequestLeaveTypeId)
+            if lt:
+                if lt.leaveTypeName not in leave_summary:
+                    leave_summary[lt.leaveTypeName] = {
+                        'type': lt.leaveTypeName,
+                        'days': 0,
+                        'is_paid': bool(lt.leaveTypeIsPaid)
+                    }
+                leave_summary[lt.leaveTypeName]['days'] += float(l.leaveRequestDays)
+        
+        leave_details = list(leave_summary.values())
+        
+        total_hours = 0
+        on_time = 0
+        late_in = 0
+        early_out = 0
+        
+        for r in records:
+            if r.attendanceClockInTime and r.attendanceClockOutTime:
+                break_duration = 0
+                if r.attendanceBreakInTime and r.attendanceBreakOutTime:
+                    break_duration = (r.attendanceBreakOutTime - r.attendanceBreakInTime).total_seconds() / 3600
+                work_duration = (r.attendanceClockOutTime - r.attendanceClockInTime).total_seconds() / 3600 - break_duration
+                total_hours += work_duration
             
-            db.session.delete(entry)
-            db.session.commit()
-            return jsonify({"success": True})
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"success": False, "error": str(e)}), 500
+            if r.attendanceClockInTime and r.attendanceClockInTime.hour < 10:
+                on_time += 1
+            elif r.attendanceClockInTime:
+                late_in += 1
+            
+            if r.attendanceClockOutTime and r.attendanceClockOutTime.hour < 18:
+                early_out += 1
+        
+        worked_days = len(records)
+        total_weekoffs = len(weekoff_dates)
+        total_holidays = len(holiday_dates) - total_weekoffs
+        working_days = days_in_month - total_weekoffs - total_holidays
+        absent_days = working_days - worked_days - leave_days
+        
+        report_data = {
+            "user_id": user_id,
+            "month": month,
+            "year": year,
+            "total_working_hours": round(total_hours, 2),
+            "worked_days": worked_days,
+            "total_weekly_off": total_weekoffs,
+            "holidays": total_holidays,
+            "leaves_taken": leave_days,
+            "leave_details": leave_details,
+            "on_time_entries": on_time,
+            "early_out": early_out,
+            "late_in": late_in,
+            "absent_days": max(0, absent_days)
+        }
+        
+        import json
+        leave_details_json = json.dumps(leave_details)
+        
+        existing = MonthlyReport.query.filter_by(reportUserId=user_id, reportMonth=month, reportYear=year).first()
+        if existing:
+            existing.reportTotalWorkingHours = report_data['total_working_hours']
+            existing.reportWorkedDays = report_data['worked_days']
+            existing.reportTotalWeeklyOff = report_data['total_weekly_off']
+            existing.reportHolidays = report_data['holidays']
+            existing.reportLeavesTaken = report_data['leaves_taken']
+            existing.reportLeaveDetails = leave_details_json
+            existing.reportOnTimeEntries = report_data['on_time_entries']
+            existing.reportEarlyOut = report_data['early_out']
+            existing.reportLateIn = report_data['late_in']
+            existing.reportAbsentDays = report_data['absent_days']
+        else:
+            existing = MonthlyReport(
+                reportUserId=user_id, reportMonth=month, reportYear=year,
+                reportTotalWorkingHours=report_data['total_working_hours'],
+                reportWorkedDays=report_data['worked_days'],
+                reportTotalWeeklyOff=report_data['total_weekly_off'],
+                reportHolidays=report_data['holidays'],
+                reportLeavesTaken=report_data['leaves_taken'],
+                reportLeaveDetails=leave_details_json,
+                reportOnTimeEntries=report_data['on_time_entries'],
+                reportEarlyOut=report_data['early_out'],
+                reportLateIn=report_data['late_in'],
+                reportAbsentDays=report_data['absent_days']
+            )
+            db.session.add(existing)
+        db.session.commit()
+        return jsonify({"success": True, "report": report_data})
+    
+    @app.route("/api/monthly-reports", methods=["GET"])
+    def api_get_monthly_reports():
+        """
+        Get Saved Monthly Reports
+        ---
+        tags:
+          - Reports
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+            description: Filter by user ID
+          - name: year
+            in: query
+            type: integer
+            description: Filter by year
+        responses:
+          200:
+            description: List of saved monthly reports
+        """
+        user_id = request.args.get('user_id', type=int)
+        year = request.args.get('year', type=int)
+        query = MonthlyReport.query
+        if user_id:
+            query = query.filter_by(reportUserId=user_id)
+        if year:
+            query = query.filter_by(reportYear=year)
+        reports = query.order_by(MonthlyReport.reportYear.desc(), MonthlyReport.reportMonth.desc()).all()
+        return jsonify({"success": True, "reports": [r.to_dict() for r in reports]})
+    
+    @app.route("/monthly-reports")
+    def monthly_reports_view():
+        return render_template("monthly_reports.html")
 
     return app
 
