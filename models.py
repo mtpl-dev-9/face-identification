@@ -160,6 +160,10 @@ class LeaveType(db.Model):
 
     leaveTypeId = db.Column('leaveTypeId', db.Integer, primary_key=True)
     leaveTypeName = db.Column('leaveTypeName', db.String(50), unique=True, nullable=False)
+    leaveTypeIsPaid = db.Column('leaveTypeIsPaid', db.Boolean, default=True)
+    leaveTypeIsEncashable = db.Column('leaveTypeIsEncashable', db.Boolean, default=False)
+    leaveTypeRequireApproval = db.Column('leaveTypeRequireApproval', db.Boolean, default=True)
+    leaveTypeRequireAttachment = db.Column('leaveTypeRequireAttachment', db.Boolean, default=False)
     leaveTypeIsActive = db.Column('leaveTypeIsActive', db.Boolean, default=True)
     leaveTypeCreatedAt = db.Column('leaveTypeCreatedAt', db.DateTime, default=get_ist_now)
 
@@ -167,6 +171,10 @@ class LeaveType(db.Model):
         return {
             "id": self.leaveTypeId,
             "name": self.leaveTypeName,
+            "is_paid": self.leaveTypeIsPaid,
+            "is_encashable": self.leaveTypeIsEncashable,
+            "require_approval": self.leaveTypeRequireApproval,
+            "require_attachment": self.leaveTypeRequireAttachment,
             "is_active": self.leaveTypeIsActive,
             "created_at": self.leaveTypeCreatedAt.isoformat() + "Z"
         }
