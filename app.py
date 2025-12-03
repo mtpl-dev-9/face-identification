@@ -21,7 +21,7 @@ load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, ManualTimeEntry
 from multilevel_models import LeaveApprover, LeaveApproval
 from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
@@ -49,15 +49,23 @@ def get_allowed_ips():
 def get_ist_now():
     """Get current time in IST"""
     return dt.now(IST)
-from face_utils import (
-    load_image_from_file_storage,
-    load_image_from_base64,
-    get_face_encodings,
-    encode_to_json,
-    decode_from_json,
-    check_face_exists,
-)
-import face_recognition
+
+# Import face recognition utilities (optional - only needed for face recognition features)
+try:
+    from face_utils import (
+        load_image_from_file_storage,
+        load_image_from_base64,
+        get_face_encodings,
+        encode_to_json,
+        decode_from_json,
+        check_face_exists,
+    )
+    import face_recognition
+    FACE_RECOGNITION_AVAILABLE = True
+except ImportError as e:
+    FACE_RECOGNITION_AVAILABLE = False
+    print(f"Warning: Face recognition modules not available: {e}")
+    print("Manual time entry and other non-face-recognition features will still work.")
 
 
 def create_app():
@@ -215,6 +223,8 @@ def create_app():
 
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
+        if not FACE_RECOGNITION_AVAILABLE:
+            return None, None
         persons: List[Person] = Person.query.filter_by(biometricIsActive=True).all()
         if not persons:
             return None, None
@@ -2011,6 +2021,276 @@ def create_app():
         
         db.session.commit()
         return jsonify({"success": True, "count": count, "users": len(users)})
+
+    # --- Manual Time Entry Management ---
+    @app.route("/manual-time-entry")
+    def manual_time_entry_view():
+        return render_template("manual_time_entry.html")
+
+    @app.route("/api/manual-time-entries", methods=["GET"])
+    def api_get_manual_time_entries():
+        """
+        Get Manual Time Entries
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+          - name: start_date
+            in: query
+            type: string
+            format: date
+          - name: end_date
+            in: query
+            type: string
+            format: date
+        responses:
+          200:
+            description: List of manual time entries
+        """
+        try:
+            user_id = request.args.get('user_id', type=int)
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            query = ManualTimeEntry.query
+            
+            if user_id:
+                query = query.filter_by(entryUserId=user_id)
+            
+            if start_date_str:
+                try:
+                    start_date = dt.strptime(start_date_str, '%Y-%m-%d').date()
+                    query = query.filter(ManualTimeEntry.entryWorkingDate >= start_date)
+                except ValueError:
+                    pass
+            
+            if end_date_str:
+                try:
+                    end_date = dt.strptime(end_date_str, '%Y-%m-%d').date()
+                    query = query.filter(ManualTimeEntry.entryWorkingDate <= end_date)
+                except ValueError:
+                    pass
+            
+            entries = query.order_by(ManualTimeEntry.entryWorkingDate.desc(), ManualTimeEntry.entryCreatedAt.desc()).all()
+            return jsonify({"success": True, "entries": [e.to_dict() for e in entries]})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/manual-time-entries", methods=["POST"])
+    def api_create_manual_time_entry():
+        """
+        Create or Update Manual Time Entry
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                working_date:
+                  type: string
+                  format: date
+                check_in_time:
+                  type: string
+                  format: time
+                check_out_time:
+                  type: string
+                  format: time
+                break_in_time:
+                  type: string
+                  format: time
+                break_out_time:
+                  type: string
+                  format: time
+                created_by:
+                  type: integer
+        responses:
+          200:
+            description: Manual time entry created or updated
+        """
+        try:
+            data = request.get_json() or {}
+            user_id = data.get('user_id')
+            working_date_str = data.get('working_date')
+            check_in_time_str = data.get('check_in_time')
+            check_out_time_str = data.get('check_out_time')
+            break_in_time_str = data.get('break_in_time')
+            break_out_time_str = data.get('break_out_time')
+            created_by = data.get('created_by')
+
+            if not user_id or not working_date_str:
+                return jsonify({"success": False, "error": "user_id and working_date are required"}), 400
+
+            # NOTE: Do not hard-fail if user record is missing; allow manual entries
+            # This makes the feature usable even if mtpl_users is not fully populated.
+
+            # Parse working date
+            try:
+                working_date = dt.strptime(working_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+
+            # Helper to parse time strings (accepts HH:MM or HH:MM:SS)
+            def parse_time(time_str):
+                if not time_str:
+                    return None
+                for fmt in ('%H:%M:%S', '%H:%M'):
+                    try:
+                        return dt.strptime(time_str, fmt).time()
+                    except ValueError:
+                        continue
+                return None
+
+            check_in_time = parse_time(check_in_time_str) if check_in_time_str else None
+            check_out_time = parse_time(check_out_time_str) if check_out_time_str else None
+            break_in_time = parse_time(break_in_time_str) if break_in_time_str else None
+            break_out_time = parse_time(break_out_time_str) if break_out_time_str else None
+
+            # Upsert: if an entry already exists for this user/date, update it instead of erroring
+            entry = ManualTimeEntry.query.filter_by(
+                entryUserId=user_id,
+                entryWorkingDate=working_date
+            ).first()
+
+            if entry:
+                # Update existing entry times
+                entry.entryCheckInTime = check_in_time
+                entry.entryCheckOutTime = check_out_time
+                entry.entryBreakInTime = break_in_time
+                entry.entryBreakOutTime = break_out_time
+
+                # If a creator is provided, (back)fill or update the creator info
+                if created_by is not None:
+                    entry.entryCreatedBy = created_by
+            else:
+                # Create a brand new manual time entry, including who created it
+                entry = ManualTimeEntry(
+                    entryUserId=user_id,
+                    entryWorkingDate=working_date,
+                    entryCheckInTime=check_in_time,
+                    entryCheckOutTime=check_out_time,
+                    entryBreakInTime=break_in_time,
+                    entryBreakOutTime=break_out_time,
+                    entryCreatedBy=created_by
+                )
+                db.session.add(entry)
+
+            db.session.commit()
+
+            return jsonify({"success": True, "entry": entry.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/manual-time-entries/<int:entry_id>", methods=["PUT"])
+    def api_update_manual_time_entry(entry_id):
+        """
+        Update Manual Time Entry
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: entry_id
+            in: path
+            type: integer
+            required: true
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                check_in_time:
+                  type: string
+                  format: time
+                check_out_time:
+                  type: string
+                  format: time
+                break_in_time:
+                  type: string
+                  format: time
+                break_out_time:
+                  type: string
+                  format: time
+        responses:
+          200:
+            description: Manual time entry updated
+        """
+        try:
+            entry = ManualTimeEntry.query.get(entry_id)
+            if not entry:
+                return jsonify({"success": False, "error": "Entry not found"}), 404
+            
+            data = request.get_json() or {}
+            
+            def parse_time(time_str):
+                if not time_str:
+                    return None
+                try:
+                    return dt.strptime(time_str, '%H:%M:%S').time()
+                except ValueError:
+                    try:
+                        return dt.strptime(time_str, '%H:%M').time()
+                    except ValueError:
+                        return None
+            
+            if 'check_in_time' in data:
+                entry.entryCheckInTime = parse_time(data.get('check_in_time'))
+            if 'check_out_time' in data:
+                entry.entryCheckOutTime = parse_time(data.get('check_out_time'))
+            if 'break_in_time' in data:
+                entry.entryBreakInTime = parse_time(data.get('break_in_time'))
+            if 'break_out_time' in data:
+                entry.entryBreakOutTime = parse_time(data.get('break_out_time'))
+            
+            # Validate times
+            if entry.entryCheckInTime and entry.entryCheckOutTime and entry.entryCheckInTime >= entry.entryCheckOutTime:
+                return jsonify({"success": False, "error": "Check-out time must be after check-in time"}), 400
+            
+            if entry.entryBreakInTime and entry.entryBreakOutTime and entry.entryBreakInTime >= entry.entryBreakOutTime:
+                return jsonify({"success": False, "error": "Break-out time must be after break-in time"}), 400
+            
+            db.session.commit()
+            return jsonify({"success": True, "entry": entry.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/manual-time-entries/<int:entry_id>", methods=["DELETE"])
+    def api_delete_manual_time_entry(entry_id):
+        """
+        Delete Manual Time Entry
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: entry_id
+            in: path
+            type: integer
+            required: true
+        responses:
+          200:
+            description: Manual time entry deleted
+        """
+        try:
+            entry = ManualTimeEntry.query.get(entry_id)
+            if not entry:
+                return jsonify({"success": False, "error": "Entry not found"}), 404
+            
+            db.session.delete(entry)
+            db.session.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
 
     return app
 
