@@ -1,9 +1,14 @@
 import os
 from math import radians, sin, cos, sqrt, atan2
 import pytz
+from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 IST = pytz.timezone('Asia/Kolkata')
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two coordinates in meters using Haversine formula"""
@@ -20,20 +25,40 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-key")
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL",
-        "sqlite:///" + os.path.join(BASE_DIR, "instance", "attendance.db")
-    )
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # ============================================
+    # FLASK SECRET KEY CONFIGURATION
+    # ============================================
+    # Generate secure key: python -c "import secrets; print(secrets.token_hex(32))"
+    SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-key-f8a3c9e2d1b4a7f6e5d4c3b2a1"
+    
+    # ============================================
+    # FILE UPLOAD CONFIGURATION
+    # ============================================
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
-    FACE_RECOGNITION_TOLERANCE = 0.5  # lower = stricter
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max file size
     
-    # Location-based attendance settings
-    OFFICE_LATITUDE = 23.022797   # Replace with your office latitude
-    OFFICE_LONGITUDE =   72.531968  # Replace with your office longitude
-    GEOFENCE_RADIUS_METERS = 10000  # 10km for testing (change to 50 for production)
+    # ============================================
+    # FACE RECOGNITION CONFIGURATION
+    # ============================================
+    FACE_RECOGNITION_TOLERANCE = 0.5  # 0.4-0.6 recommended (lower = stricter)
     
-    # IP whitelist (add your allowed IPs)
-    ALLOWED_IPS = ["127.0.0.1", "localhost"]  # Add your office IPs here
+    # ============================================
+    # LOCATION-BASED ATTENDANCE (Geofencing)
+    # ============================================
+    # These can be updated via Settings page in the web interface
+    OFFICE_LATITUDE = 23.022797      # Your office latitude
+    OFFICE_LONGITUDE = 72.531968     # Your office longitude
+    GEOFENCE_RADIUS_METERS = 10000   # 10km for testing, use 50m for production
+    
+    # ============================================
+    # IP WHITELIST CONFIGURATION
+    # ============================================
+    # Add allowed IP addresses here or manage via Settings page
+    ALLOWED_IPS = [
+        "127.0.0.1",           # Localhost IPv4
+        "::1",                 # Localhost IPv6
+        "localhost",           # Localhost hostname
+        # Add your office/allowed IPs below:
+        # "203.0.113.45",      # Example office IP
+        # "198.51.100.0/24",   # Example IP range
+    ]

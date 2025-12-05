@@ -11,11 +11,12 @@
           <th>Employee Code</th>
           <th>Registered At</th>
           <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for p in persons %}
-        <tr>
+        <tr id="person-{{ p.id }}">
           <td>{{ loop.index }}</td>
           <td>{{ p.name }}</td>
           <td>{{ p.employee_code }}</td>
@@ -27,14 +28,51 @@
               <span class="badge bg-secondary">Inactive</span>
             {% endif %}
           </td>
+          <td>
+            <button class="btn btn-sm btn-danger" onclick="deletePerson({{ p.id }}, '{{ p.name }}')">Delete</button>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="text-center">No persons registered yet.</td>
+          <td colspan="6" class="text-center">No persons registered yet.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<script>
+function deletePerson(personId, personName) {
+  if (!confirm(`Are you sure you want to delete ${personName}?\n\nThis will also delete all their attendance records.`)) {
+    return;
+  }
+  
+  const row = document.getElementById(`person-${personId}`);
+  
+  fetch(`/api/persons/${personId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      row.style.animation = 'slideOutRight 0.5s ease-out';
+      setTimeout(() => {
+        row.remove();
+        if (window.showToast) {
+          showToast(`✅ ${personName} deleted successfully`, 'success');
+        }
+      }, 500);
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    alert('Error deleting person: ' + err.message);
+  });
+}
+</script>
 {% endblock %}

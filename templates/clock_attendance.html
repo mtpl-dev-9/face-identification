@@ -20,6 +20,15 @@
           </button>
         </div>
 
+        <div class="d-flex justify-content-center gap-3 mb-3">
+          <button class="btn btn-warning btn-lg" id="breakInBtn">
+            ☕ Break In
+          </button>
+          <button class="btn btn-info btn-lg" id="breakOutBtn">
+            ☕ Break Out
+          </button>
+        </div>
+
         <div id="statusDiv" class="alert" style="display:none;"></div>
         
         <div class="alert alert-info" id="helpDiv">
@@ -144,7 +153,7 @@ function showStatus(message, type) {
   setTimeout(() => {
     statusDiv.style.animation = "slideOutRight 0.5s ease-out";
     setTimeout(() => statusDiv.style.display = "none", 500);
-  }, 5000);
+  }, 8000);
 }
 
 function captureAndSend(action) {
@@ -203,6 +212,54 @@ function captureAndSend(action) {
 
 clockInBtn.onclick = () => captureAndSend("clock_in");
 clockOutBtn.onclick = () => captureAndSend("clock_out");
+
+const breakInBtn = document.getElementById("breakInBtn");
+const breakOutBtn = document.getElementById("breakOutBtn");
+
+function simpleBreak(action) {
+  if (!userLocation) {
+    if (!locationAttempted) {
+      requestLocation();
+    }
+    showStatus("Location not available. Please allow location access and try again.", "danger");
+    return;
+  }
+
+  const btn = action === "break_in" ? breakInBtn : breakOutBtn;
+  btn.disabled = true;
+  btn.innerHTML = action === "break_in" ? "⏳ Breaking In..." : "⏳ Breaking Out...";
+
+  fetch("/api/attendance/break", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: action,
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      const successMsg = `✅ ${data.message}<br>📍 Distance from office: ${data.distance_from_office}m`;
+      showStatus(successMsg, "success");
+      playNotificationSound();
+      showLargeNotification(data.message, "info");
+      loadTodayAttendance();
+    } else {
+      showStatus(`❌ ${data.error}`, "danger");
+      playErrorSound();
+    }
+  })
+  .catch(err => showStatus(`❌ Error: ${err.message}`, "danger"))
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = action === "break_in" ? "☕ Break In" : "☕ Break Out";
+  });
+}
+
+breakInBtn.onclick = () => simpleBreak("break_in");
+breakOutBtn.onclick = () => simpleBreak("break_out");
 
 function loadTodayAttendance() {
   fetch("/api/attendance/latest")
@@ -299,7 +356,7 @@ function showLargeNotification(message, type) {
   setTimeout(() => {
     notification.style.animation = 'popOut 0.5s ease-out forwards';
     setTimeout(() => notification.remove(), 500);
-  }, 3000);
+  }, 5000);
 }
 
 // Add popup animations

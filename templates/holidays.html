@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title mb-4"><i class="fas fa-calendar-days"></i> Holidays & Week-Offs Management</h3>
+        
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5>Add Holiday / Week-Off</h5>
+            
+            <!-- Mode Selection -->
+            <div class="btn-group mb-3" role="group">
+              <input type="radio" class="btn-check" name="addMode" id="modeManual" value="manual" checked>
+              <label class="btn btn-outline-primary" for="modeManual"><i class="fas fa-calendar-day"></i> Manual Date</label>
+              
+              <input type="radio" class="btn-check" name="addMode" id="modeWeekly" value="weekly">
+              <label class="btn btn-outline-primary" for="modeWeekly"><i class="fas fa-calendar-week"></i> Weekly Pattern</label>
+            </div>
+
+            <!-- Manual Date Mode -->
+            <div id="manualMode" class="mode-section">
+              <div class="row">
+                <div class="col-md-3">
+                  <label class="form-label">Date</label>
+                  <input type="date" class="form-control" id="holidayDate">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Name / Description</label>
+                  <input type="text" class="form-control" id="holidayName" placeholder="e.g., Diwali, Independence Day">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">&nbsp;</label>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isWeekoff">
+                    <label class="form-check-label" for="isWeekoff">Week-Off</label>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">&nbsp;</label>
+                  <button class="btn btn-success w-100" id="addHolidayBtn">
+                    <i class="fas fa-plus"></i> Add
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weekly Pattern Mode -->
+            <div id="weeklyMode" class="mode-section" style="display: none;">
+              <div class="row">
+                <div class="col-md-2">
+                  <label class="form-label">Select Day(s)</label>
+                  <select class="form-select" id="weekDay" multiple size="7">
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                  </select>
+                  <small class="text-muted">Ctrl+Click</small>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Week(s)</label>
+                  <select class="form-select" id="weekNumber" multiple size="5">
+                    <option value="1">1st Week</option>
+                    <option value="2">2nd Week</option>
+                    <option value="3">3rd Week</option>
+                    <option value="4">4th Week</option>
+                    <option value="5">5th Week</option>
+                  </select>
+                  <small class="text-muted">Ctrl+Click</small>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Month</label>
+                  <select class="form-select" id="weekMonth">
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Year</label>
+                  <select class="form-select" id="weekYear"></select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Name</label>
+                  <input type="text" class="form-control" id="weekName" placeholder="e.g., Week-Off">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">&nbsp;</label>
+                  <button class="btn btn-success w-100" id="addWeeklyBtn">
+                    <i class="fas fa-plus"></i> Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <label class="form-label">Select Month & Year</label>
+            <div class="input-group">
+              <select class="form-select" id="monthSelect">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+              <select class="form-select" id="yearSelect"></select>
+              <button class="btn btn-primary" onclick="loadCalendar()">
+                <i class="fas fa-sync"></i> Load
+              </button>
+            </div>
+          </div>
+          <div class="col-md-6">
+          </div>
+        </div>
+
+        <div id="calendarView" class="table-responsive">
+          <table class="table table-bordered">
+            <thead class="table-dark">
+              <tr>
+                <th>Sun</th>
+                <th>Mon</th>
+                <th>Tue</th>
+                <th>Wed</th>
+                <th>Thu</th>
+                <th>Fri</th>
+                <th>Sat</th>
+              </tr>
+            </thead>
+            <tbody id="calendarBody">
+              <!-- Calendar will be generated here -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-4">
+          <h5>Legend:</h5>
+          <span class="badge bg-danger me-2">Holiday</span>
+          <span class="badge bg-warning text-dark me-2">Week-Off</span>
+          <span class="badge bg-success me-2">Working Day</span>
+          <span class="badge bg-secondary me-2">Sunday</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow mt-4">
+      <div class="card-body">
+        <h5>Holidays List</h5>
+        <div id="holidaysList">
+          <p class="text-muted">Loading...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+let currentMonth, currentYear;
+let holidays = [];
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  const now = new Date();
+  currentMonth = now.getMonth() + 1;
+  currentYear = now.getFullYear();
+  
+  // Populate year selects
+  const yearSelect = document.getElementById('yearSelect');
+  const weekYearSelect = document.getElementById('weekYear');
+  for (let year = currentYear - 1; year <= currentYear + 2; year++) {
+    const opt1 = document.createElement('option');
+    opt1.value = year;
+    opt1.textContent = year;
+    if (year === currentYear) opt1.selected = true;
+    yearSelect.appendChild(opt1);
+    
+    const opt2 = document.createElement('option');
+    opt2.value = year;
+    opt2.textContent = year;
+    if (year === currentYear) opt2.selected = true;
+    weekYearSelect.appendChild(opt2);
+  }
+  
+  // Set current month
+  document.getElementById('monthSelect').value = currentMonth;
+  document.getElementById('weekMonth').value = currentMonth;
+  
+  // Mode toggle
+  document.querySelectorAll('input[name="addMode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      if (this.value === 'manual') {
+        document.getElementById('manualMode').style.display = 'block';
+        document.getElementById('weeklyMode').style.display = 'none';
+      } else {
+        document.getElementById('manualMode').style.display = 'none';
+        document.getElementById('weeklyMode').style.display = 'block';
+      }
+    });
+  });
+  
+  // Add holiday button
+  document.getElementById('addHolidayBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    addHoliday();
+  });
+  
+  // Add weekly button
+  document.getElementById('addWeeklyBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    addWeeklyHolidays();
+  });
+  
+  loadCalendar();
+});
+
+function loadCalendar() {
+  currentMonth = parseInt(document.getElementById('monthSelect').value);
+  currentYear = parseInt(document.getElementById('yearSelect').value);
+  
+  console.log('Loading calendar for:', currentYear, currentMonth);
+  
+  fetch(`/api/holidays?year=${currentYear}&month=${currentMonth}`)
+    .then(res => {
+      console.log('GET holidays response:', res.status);
+      return res.json();
+    })
+    .then(data => {
+      console.log('Holidays data:', data);
+      holidays = data.holidays || [];
+      renderCalendar();
+      renderHolidaysList();
+    })
+    .catch(err => {
+      console.error('Error loading calendar:', err);
+      alert('Error loading calendar: ' + err.message);
+    });
+}
+
+function renderCalendar() {
+  const firstDay = new Date(currentYear, currentMonth - 1, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  
+  let html = '<tr>';
+  let dayCount = 1;
+  
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    html += '<td class="text-muted"></td>';
+  }
+  
+  // Days of month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const holiday = holidays.find(h => h.date === dateStr);
+    const dayOfWeek = new Date(currentYear, currentMonth - 1, day).getDay();
+    
+    let cellClass = '';
+    
+    if (holiday) {
+      cellClass = holiday.is_weekoff ? 'table-warning' : 'table-danger';
+    } else if (dayOfWeek === 0) {
+      cellClass = 'table-secondary';
+    } else {
+      cellClass = 'table-success';
+    }
+    
+    html += `<td class="${cellClass}" style="cursor: pointer;" data-date="${dateStr}">
+      <strong class="text-dark">${day}</strong>
+    </td>`;
+    
+    if ((firstDay + day) % 7 === 0) {
+      html += '</tr><tr>';
+    }
+  }
+  
+  // Empty cells after last day
+  const lastDay = new Date(currentYear, currentMonth - 1, daysInMonth).getDay();
+  for (let i = lastDay; i < 6; i++) {
+    html += '<td class="text-muted"></td>';
+  }
+  
+  html += '</tr>';
+  document.getElementById('calendarBody').innerHTML = html;
+  
+  // Add click listeners to calendar cells
+  document.querySelectorAll('#calendarBody td[data-date]').forEach(cell => {
+    cell.addEventListener('click', function() {
+      selectDate(this.getAttribute('data-date'));
+    });
+  });
+}
+
+function renderHolidaysList() {
+  const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date) - new Date(b.date));
+  
+  if (sortedHolidays.length === 0) {
+    document.getElementById('holidaysList').innerHTML = '<p class="text-muted">No holidays marked for this month</p>';
+    return;
+  }
+  
+  let html = '<div class="list-group">';
+  sortedHolidays.forEach(holiday => {
+    const date = new Date(holiday.date);
+    const badgeClass = holiday.is_weekoff ? 'bg-warning text-dark' : 'bg-danger';
+    const type = holiday.is_weekoff ? 'Week-Off' : 'Holiday';
+    
+    html += `
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <strong>${date.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</strong>
+          <span class="badge ${badgeClass} ms-2">${type}</span>
+          <br><small>${holiday.name}</small>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="deleteHoliday(${holiday.id})">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    `;
+  });
+  html += '</div>';
+  
+  document.getElementById('holidaysList').innerHTML = html;
+}
+
+function selectDate(dateStr) {
+  document.getElementById('holidayDate').value = dateStr;
+  document.getElementById('holidayName').focus();
+}
+
+function addWeeklyHolidays() {
+  const weekDaySelect = document.getElementById('weekDay');
+  const weekNumberSelect = document.getElementById('weekNumber');
+  const selectedDays = Array.from(weekDaySelect.selectedOptions).map(opt => parseInt(opt.value));
+  const selectedWeeks = Array.from(weekNumberSelect.selectedOptions).map(opt => parseInt(opt.value));
+  const month = parseInt(document.getElementById('weekMonth').value);
+  const year = parseInt(document.getElementById('weekYear').value);
+  const name = document.getElementById('weekName').value;
+  
+  if (selectedDays.length === 0 || !name) {
+    alert('Please select day(s) and enter a name');
+    return;
+  }
+  
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const datesToAdd = [];
+  
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    if (selectedDays.includes(date.getDay())) {
+      // If weeks are selected, check if this date is in selected week
+      if (selectedWeeks.length > 0) {
+        const weekOfMonth = Math.ceil(day / 7);
+        if (!selectedWeeks.includes(weekOfMonth)) {
+          continue;
+        }
+      }
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      datesToAdd.push({date: dateStr, name: name, is_weekoff: true});
+    }
+  }
+  
+  if (datesToAdd.length === 0) {
+    alert('No matching dates found');
+    return;
+  }
+  
+  Promise.all(datesToAdd.map(holiday => 
+    fetch('/api/holidays', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(holiday)
+    }).then(res => res.json())
+  )).then(results => {
+    const added = results.filter(r => r.success).length;
+    alert(`Added ${added} holidays successfully!`);
+    document.getElementById('weekName').value = '';
+    loadCalendar();
+  }).catch(err => {
+    alert('Error: ' + err.message);
+  });
+}
+
+function addHoliday() {
+  const date = document.getElementById('holidayDate').value;
+  const name = document.getElementById('holidayName').value;
+  const isWeekoff = document.getElementById('isWeekoff').checked;
+  
+  if (!date || !name) {
+    alert('Please fill all fields');
+    return;
+  }
+  
+  fetch('/api/holidays', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date, name, is_weekoff: isWeekoff})
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      alert('Holiday added successfully!');
+      document.getElementById('holidayDate').value = '';
+      document.getElementById('holidayName').value = '';
+      document.getElementById('isWeekoff').checked = false;
+      loadCalendar();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    alert('Error: ' + err.message);
+  });
+}
+
+function deleteHoliday(id) {
+  if (!confirm('Are you sure you want to delete this holiday?')) return;
+  
+  fetch(`/api/holidays/${id}`, {method: 'DELETE'})
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        loadCalendar();
+      } else {
+        alert(data.error);
+      }
+    });
+}
+</script>
+
+<style>
+#calendarView td {
+  height: 80px;
+  vertical-align: top;
+  padding: 8px;
+}
+#calendarView td:hover {
+  background-color: rgba(102, 126, 234, 0.1);
+}
+</style>
+{% endblock %}

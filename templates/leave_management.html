@@ -1,0 +1,1180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h2><i class="fas fa-umbrella-beach"></i> Leave Management System</h2>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mt-4" role="tablist">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#admin">Admin Panel</a></li>
+
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#employee">Employee Panel</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#requests">Leave Requests</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#approvers">Multi-Level Approval</a></li>
+</ul>
+
+<div class="tab-content mt-3">
+  <!-- Admin Panel -->
+  <div id="admin" class="tab-pane fade show active">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-list"></i> Manage Leave Types</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <input type="text" id="newLeaveType" class="form-control mb-2" placeholder="Leave Type Name (e.g., Casual Leave)">
+              
+              <div class="row mb-2">
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isPaid" checked>
+                    <label class="form-check-label" for="isPaid">Is Paid</label>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isEncashable">
+                    <label class="form-check-label" for="isEncashable">Encashable</label>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row mb-2">
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="requireApproval" checked>
+                    <label class="form-check-label" for="requireApproval">Require Approval</label>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="requireAttachment">
+                    <label class="form-check-label" for="requireAttachment">Require Attachment</label>
+                  </div>
+                </div>
+              </div>
+              
+              <button class="btn btn-primary w-100" onclick="addLeaveType()"><i class="fas fa-plus"></i> Add Leave Type</button>
+            </div>
+            <div id="leaveTypesList"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-user-cog"></i> Assign Leave Balance</div>
+          <div class="card-body">
+            <select id="selectUser" class="form-select mb-2"></select>
+            <select id="selectLeaveType" class="form-select mb-2"></select>
+            <input type="number" id="leaveTotal" class="form-control mb-2" placeholder="Total leaves (e.g., 12 or 12.5)" min="0" step="0.5">
+            <small class="text-muted d-block mb-2">You can enter decimal values like 0.5, 12.5, etc.</small>
+            <input type="number" id="leaveYear" class="form-control mb-2" value="2024" min="2020">
+            <button class="btn btn-success w-100" onclick="assignLeaveBalance()"><i class="fas fa-check"></i> Assign Balance</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-success text-white"><i class="fas fa-user-plus"></i> Bulk Add Employees</div>
+          <div class="card-body">
+            <textarea id="bulkEmployees" class="form-control mb-2" rows="6" placeholder="Enter employees (one per line):
+John Doe, john.doe
+Jane Smith, jane.smith"></textarea>
+            <small class="text-muted d-block mb-2">Format: FirstName LastName, LoginCode</small>
+            <button class="btn btn-success w-100" onclick="bulkAddEmployees()"><i class="fas fa-user-plus"></i> Add Employees</button>
+            <div id="bulkAddResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-primary text-white"><i class="fas fa-users"></i> Bulk Assign Leave Balance</div>
+          <div class="card-body">
+            <label class="form-label">Select Employees</label>
+            <select id="bulkSelectUsers" class="form-select mb-2" multiple size="5"></select>
+            <button class="btn btn-sm btn-outline-primary" onclick="selectAllUsers()"><i class="fas fa-check-double"></i> All</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearUserSelection()"><i class="fas fa-times"></i> Clear</button>
+            <select id="bulkLeaveType" class="form-select mt-2 mb-2"></select>
+            <input type="number" id="bulkLeaveTotal" class="form-control mb-2" placeholder="Total leaves" min="0" step="0.5">
+            <input type="number" id="bulkLeaveYear" class="form-control mb-2" value="2024" min="2020">
+            <button class="btn btn-primary w-100" onclick="bulkAssignLeaveBalance()"><i class="fas fa-users-cog"></i> Assign</button>
+            <div id="bulkResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-info text-white"><i class="fas fa-magic"></i> Assign Default Leaves</div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-4">
+                <label class="form-label">Casual</label>
+                <input type="number" id="defaultCasual" class="form-control" value="4" min="0" step="0.5">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Sick</label>
+                <input type="number" id="defaultSick" class="form-control" value="7" min="0" step="0.5">
+              </div>
+              <div class="col-4">
+                <label class="form-label">Celebratory</label>
+                <input type="number" id="defaultCelebratory" class="form-control" value="0.5" min="0" step="0.5">
+              </div>
+            </div>
+            <input type="number" id="defaultYear" class="form-control mt-2 mb-2" value="2024" min="2020">
+            <button class="btn btn-info w-100" onclick="assignDefaultLeaves()"><i class="fas fa-magic"></i> Assign to All Users</button>
+            <small class="text-muted d-block mt-2">Assigns default leaves to all active users</small>
+            <div id="defaultResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-warning text-dark"><i class="fas fa-calendar-alt"></i> Rollover Leaves to New Year</div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <label class="form-label">From Year</label>
+                <input type="number" id="rolloverFromYear" class="form-control mb-2" value="2024" min="2020">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">To Year</label>
+                <input type="number" id="rolloverToYear" class="form-control mb-2" value="2025" min="2020">
+              </div>
+            </div>
+            <button class="btn btn-warning w-100" onclick="rolloverLeaves()"><i class="fas fa-sync-alt"></i> Rollover All Employees</button>
+            <small class="text-muted d-block mt-2">Copy leave balances to new year (used=0)</small>
+            <div id="rolloverResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee Panel -->
+  <div id="employee" class="tab-pane fade">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-wallet"></i> My Leave Balance</div>
+          <div class="card-body">
+            <select id="empSelectUser" class="form-select mb-3" onchange="loadEmployeeBalance()"></select>
+            <div id="employeeBalance"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="fas fa-paper-plane"></i> Request Leave</div>
+          <div class="card-body">
+            <select id="reqUser" class="form-select mb-2"></select>
+            <select id="reqLeaveType" class="form-select mb-2"></select>
+            <input type="date" id="reqFromDate" class="form-control mb-2">
+            <input type="date" id="reqToDate" class="form-control mb-2">
+            <select id="reqDayType" class="form-select mb-2">
+              <option value="full">Full Day</option>
+              <option value="half">Half Day (0.5)</option>
+            </select>
+            <textarea id="reqReason" class="form-control mb-2" rows="2" placeholder="Reason for leave"></textarea>
+            <button class="btn btn-primary w-100" onclick="requestLeave()"><i class="fas fa-paper-plane"></i> Submit Request</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leave Requests -->
+  <div id="requests" class="tab-pane fade">
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-inbox"></i> All Leave Requests
+        <div class="btn-group float-end" role="group">
+          <button class="btn btn-sm btn-outline-primary" onclick="filterRequests('all')">All</button>
+          <button class="btn btn-sm btn-outline-warning" onclick="filterRequests('pending')">Pending</button>
+          <button class="btn btn-sm btn-outline-success" onclick="filterRequests('approved')">Approved</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="filterRequests('rejected')">Rejected</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Approval Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="requestsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Level Approval Tab -->
+  <div id="approvers" class="tab-pane fade">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-primary text-white"><i class="fas fa-user-shield"></i> Manage Approvers</div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <select id="approverUser" class="form-select">
+                  <option value="">Select User</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="approverName" class="form-control" placeholder="Approver Name">
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-12">
+                <select id="approverRole" class="form-select">
+                  <option value="Manager">Manager</option>
+                  <option value="HR">HR</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Director">Director</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary w-100" onclick="addApprover()"><i class="fas fa-plus"></i> Add Approver</button>
+            <div id="approversList" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header bg-success text-white"><i class="fas fa-user-cog"></i> Assign Approvers to User</div>
+          <div class="card-body">
+            <label class="form-label">Select User (Employee):</label>
+            <select id="selectUserForApprovers" class="form-select mb-3" onchange="loadUserApprovers()">
+              <option value="">Select User</option>
+            </select>
+            
+            <div id="currentUserApprovers" class="mb-3"></div>
+            
+            <label class="form-label">Assign Multiple Approvers:</label>
+            <div id="approversCheckboxes" class="mb-3"></div>
+            
+            <button class="btn btn-success w-100" onclick="assignApproversToUser()"><i class="fas fa-user-check"></i> Assign Approvers to User</button>
+            <div id="assignResult" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row mt-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header bg-info text-white"><i class="fas fa-clipboard-check"></i> Approval Workflow</div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Request ID</th>
+                    <th>Employee</th>
+                    <th>Leave Type</th>
+                    <th>Dates</th>
+                    <th>Approver</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Comments</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="approvalsTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let leaveTypes = [];
+let users = [];
+let currentFilter = 'all';
+let approvers = [];
+let leaveRequests = [];
+
+async function loadLeaveTypes() {
+  const res = await fetch('/api/leave-creation-form');
+  const data = await res.json();
+  leaveTypes = data.leave_types || [];
+  
+  const list = document.getElementById('leaveTypesList');
+  list.innerHTML = leaveTypes.map(lt => `
+    <div class="mb-2 p-2 border rounded">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <strong><i class="fas fa-tag"></i> ${lt.name}</strong>
+        <button class="btn btn-sm btn-danger" onclick="deleteLeaveType(${lt.id})"><i class="fas fa-trash"></i></button>
+      </div>
+      <div class="small text-muted">
+        ${lt.is_paid ? '<span class="badge bg-success">Paid</span>' : '<span class="badge bg-secondary">Unpaid</span>'}
+        ${lt.is_encashable ? '<span class="badge bg-info">Encashable</span>' : ''}
+        ${lt.require_approval ? '<span class="badge bg-warning text-dark">Needs Approval</span>' : ''}
+        ${lt.require_attachment ? '<span class="badge bg-primary">Needs Attachment</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+  
+  const selects = [document.getElementById('selectLeaveType'), document.getElementById('reqLeaveType'), document.getElementById('bulkLeaveType')];
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">Select Leave Type</option>' + 
+      leaveTypes.map(lt => `<option value="${lt.id}">${lt.name}</option>`).join('');
+  });
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/users');
+  const data = await res.json();
+  users = data.users || [];
+  
+  const selects = [
+    document.getElementById('selectUser'),
+    document.getElementById('empSelectUser'),
+    document.getElementById('reqUser')
+  ];
+  
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">Select Employee</option>' + 
+      users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+  });
+  
+  const bulkSelect = document.getElementById('bulkSelectUsers');
+  bulkSelect.innerHTML = users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+  
+  // Update approver user select
+  const approverSelect = document.getElementById('approverUser');
+  if (approverSelect) {
+    approverSelect.innerHTML = '<option value="">Select User</option>' + 
+      users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+  }
+  
+  // Update user selection for approver assignment
+  const userForApproversSelect = document.getElementById('selectUserForApprovers');
+  if (userForApproversSelect) {
+    userForApproversSelect.innerHTML = '<option value="">Select User</option>' + 
+      users.map(u => `<option value="${u.user_id}">${u.name} (${u.employee_code})</option>`).join('');
+  }
+}
+
+async function addLeaveType() {
+  const name = document.getElementById('newLeaveType').value.trim();
+  const is_paid = document.getElementById('isPaid').checked;
+  const is_encashable = document.getElementById('isEncashable').checked;
+  const require_approval = document.getElementById('requireApproval').checked;
+  const require_attachment = document.getElementById('requireAttachment').checked;
+  
+  if (!name) return alert('Enter leave type name');
+  
+  try {
+    const res = await fetch('/api/leave-creation-form', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name,
+        is_paid,
+        is_encashable,
+        require_approval,
+        require_attachment
+      })
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      alert('Leave type added successfully!');
+      document.getElementById('newLeaveType').value = '';
+      document.getElementById('isPaid').checked = true;
+      document.getElementById('isEncashable').checked = false;
+      document.getElementById('requireApproval').checked = true;
+      document.getElementById('requireAttachment').checked = false;
+      loadLeaveTypes();
+    } else {
+      alert(data.error);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error: ' + error.message);
+  }
+}
+
+async function deleteLeaveType(id) {
+  if (!confirm('Delete this leave type?')) return;
+  
+  await fetch(`/api/leave-creation-form/${id}`, {method: 'DELETE'});
+  loadLeaveTypes();
+}
+
+async function assignLeaveBalance() {
+  const user_id = document.getElementById('selectUser').value;
+  const leave_type_id = document.getElementById('selectLeaveType').value;
+  const total = parseFloat(document.getElementById('leaveTotal').value);
+  const year = parseInt(document.getElementById('leaveYear').value);
+  
+  if (!user_id || !leave_type_id || !total) return alert('Fill all fields');
+  
+  const res = await fetch('/api/leave-allotments', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id, leave_type_id, total, year, assigned_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave balance assigned successfully!');
+    document.getElementById('leaveTotal').value = '';
+  } else {
+    alert(data.error);
+  }
+}
+
+async function loadEmployeeBalance() {
+  const user_id = document.getElementById('empSelectUser').value;
+  if (!user_id) return;
+  
+  const year = new Date().getFullYear();
+  const res = await fetch(`/api/leave-allotments?user_id=${user_id}&year=${year}`);
+  const data = await res.json();
+  
+  const div = document.getElementById('employeeBalance');
+  if (data.allotments.length === 0) {
+    div.innerHTML = '<p class="text-muted">No leave balance assigned</p>';
+  } else {
+    div.innerHTML = data.allotments.map(b => `
+      <div class="alert alert-info">
+        <strong>${b.leave_type_name}</strong><br>
+        Total: ${b.total} | Used: 0 | <strong>Remaining: ${b.total}</strong>
+      </div>
+    `).join('');
+  }
+}
+
+async function requestLeave() {
+  const user_id = document.getElementById('reqUser').value;
+  const leave_type_id = document.getElementById('reqLeaveType').value;
+  const from_date = document.getElementById('reqFromDate').value;
+  const to_date = document.getElementById('reqToDate').value;
+  const day_type = document.getElementById('reqDayType').value;
+  const reason = document.getElementById('reqReason').value;
+  
+  if (!user_id || !leave_type_id || !from_date || !to_date) {
+    return alert('Fill all required fields');
+  }
+  
+  const res = await fetch('/api/leave-requests', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id, leave_type_id, from_date, to_date, day_type, reason})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    // Auto-assign approvers if user has them configured
+    try {
+      const approversRes = await fetch(`/api/user-approvers-simple?user_id=${user_id}`);
+      const approversData = await approversRes.json();
+      
+      if (approversData.success && approversData.assignments.length > 0) {
+        const approver_ids = approversData.assignments.map(a => a.approver_id);
+        
+        await fetch(`/api/leave-requests/${data.request.id}/assign-approvers`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({approver_ids})
+        });
+        
+        alert(`Leave request submitted with ${approver_ids.length} approvers assigned!`);
+      } else {
+        alert('Leave request submitted successfully! (No approvers configured)');
+      }
+    } catch (error) {
+      alert('Leave request submitted successfully!');
+    }
+    
+    document.getElementById('reqFromDate').value = '';
+    document.getElementById('reqToDate').value = '';
+    document.getElementById('reqDayType').value = 'full';
+    document.getElementById('reqReason').value = '';
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function loadRequests() {
+  const url = currentFilter === 'all' ? '/api/leave-requests' : `/api/leave-requests?status=${currentFilter}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  
+  const tbody = document.getElementById('requestsTable');
+  tbody.innerHTML = data.requests.map(r => {
+    const statusBadge = {
+      pending: 'warning',
+      approved: 'success',
+      rejected: 'danger'
+    }[r.status];
+    
+    const actions = r.status === 'pending' ? `
+      <button class="btn btn-sm btn-info" onclick="viewApprovals(${r.id})"><i class="fas fa-eye"></i></button>
+      <button class="btn btn-sm btn-success" onclick="approveRequest(${r.id})"><i class="fas fa-check"></i></button>
+      <button class="btn btn-sm btn-danger" onclick="rejectRequest(${r.id})"><i class="fas fa-times"></i></button>
+    ` : `<button class="btn btn-sm btn-info" onclick="viewApprovals(${r.id})"><i class="fas fa-eye"></i></button>`;
+    
+    return `
+      <tr>
+        <td>${r.user_name}</td>
+        <td>${r.leave_type_name}</td>
+        <td>${r.from_date}</td>
+        <td>${r.to_date}</td>
+        <td><span class="badge bg-primary">${r.days}</span></td>
+        <td>${r.reason || '-'}</td>
+        <td><span class="badge bg-${statusBadge}">${r.status}</span></td>
+        <td><div id="approval-status-${r.id}">Loading...</div></td>
+        <td>${actions}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  // Auto-assign approvers and load approval status
+  setTimeout(() => {
+    autoAssignMissingApprovers(data.requests);
+    loadApprovals();
+  }, 100);
+}
+
+async function approveRequest(id) {
+  if (!confirm('Approve this leave request?')) return;
+  
+  const res = await fetch(`/api/leave-requests/${id}/approve`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({approved_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave request approved!');
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function rejectRequest(id) {
+  if (!confirm('Reject this leave request?')) return;
+  
+  const res = await fetch(`/api/leave-requests/${id}/reject`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({approved_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Leave request rejected!');
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+function filterRequests(status) {
+  currentFilter = status;
+  loadRequests();
+}
+
+function selectAllUsers() {
+  const select = document.getElementById('bulkSelectUsers');
+  for (let i = 0; i < select.options.length; i++) {
+    select.options[i].selected = true;
+  }
+}
+
+function clearUserSelection() {
+  const select = document.getElementById('bulkSelectUsers');
+  for (let i = 0; i < select.options.length; i++) {
+    select.options[i].selected = false;
+  }
+}
+
+async function bulkAddEmployees() {
+  const text = document.getElementById('bulkEmployees').value.trim();
+  if (!text) return alert('Enter employee data');
+  
+  const lines = text.split('\n').filter(l => l.trim());
+  const employees = [];
+  
+  for (const line of lines) {
+    const parts = line.split(',').map(p => p.trim());
+    if (parts.length !== 2) continue;
+    const [name, login] = parts;
+    const nameParts = name.split(' ');
+    employees.push({
+      firstName: nameParts[0],
+      lastName: nameParts.slice(1).join(' ') || nameParts[0],
+      login: login
+    });
+  }
+  
+  if (employees.length === 0) return alert('No valid employees found');
+  
+  const resultDiv = document.getElementById('bulkAddResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Adding...';
+  
+  const res = await fetch('/api/users/bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({employees})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Added ${data.count} employees!</div>`;
+    document.getElementById('bulkEmployees').value = '';
+    loadUsers();
+    setTimeout(() => resultDiv.innerHTML = '', 3000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function bulkAssignLeaveBalance() {
+  const select = document.getElementById('bulkSelectUsers');
+  const user_ids = Array.from(select.selectedOptions).map(opt => parseInt(opt.value));
+  const leave_type_id = parseInt(document.getElementById('bulkLeaveType').value);
+  const total = parseFloat(document.getElementById('bulkLeaveTotal').value);
+  const year = parseInt(document.getElementById('bulkLeaveYear').value);
+  
+  if (user_ids.length === 0) return alert('Select at least one employee');
+  if (!leave_type_id || !total) return alert('Fill all fields');
+  
+  const resultDiv = document.getElementById('bulkResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Processing...';
+  
+  const res = await fetch('/api/leave-allotments/bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_ids, leave_type_id, total, year, assigned_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Assigned to ${data.count} employees!</div>`;
+    document.getElementById('bulkLeaveTotal').value = '';
+    clearUserSelection();
+    setTimeout(() => resultDiv.innerHTML = '', 3000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function assignDefaultLeaves() {
+  const casual = parseFloat(document.getElementById('defaultCasual').value);
+  const sick = parseFloat(document.getElementById('defaultSick').value);
+  const celebratory = parseFloat(document.getElementById('defaultCelebratory').value);
+  const year = parseInt(document.getElementById('defaultYear').value);
+  
+  if (!confirm(`Assign default leaves (Casual: ${casual}, Sick: ${sick}, Celebratory: ${celebratory}) to all users for ${year}?`)) return;
+  
+  const resultDiv = document.getElementById('defaultResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Assigning...';
+  
+  const res = await fetch('/api/leave-allotments/default', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({year, defaults: {casual, sick, celebratory}, assigned_by: 1})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Assigned default leaves to ${data.users} users!</div>`;
+    setTimeout(() => resultDiv.innerHTML = '', 5000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+async function rolloverLeaves() {
+  const from_year = parseInt(document.getElementById('rolloverFromYear').value);
+  const to_year = parseInt(document.getElementById('rolloverToYear').value);
+  
+  if (!from_year || !to_year) return alert('Enter both years');
+  if (to_year <= from_year) return alert('To year must be greater than from year');
+  
+  if (!confirm(`Rollover all leave balances from ${from_year} to ${to_year}?`)) return;
+  
+  const user_ids = users.map(u => u.user_id);
+  
+  const resultDiv = document.getElementById('rolloverResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Rolling over...';
+  
+  const res = await fetch('/api/user-leave-balance/rollover', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({from_year, to_year, user_ids})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Rolled over ${data.count} leave balances to ${to_year}!</div>`;
+    setTimeout(() => resultDiv.innerHTML = '', 5000);
+  } else {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+  }
+}
+
+// Multi-Level Approval Functions
+async function loadApprovers() {
+  const res = await fetch('/api/leave-approvers');
+  const data = await res.json();
+  approvers = data.approvers || [];
+  
+  const list = document.getElementById('approversList');
+  if (list) {
+    list.innerHTML = approvers.map(a => `
+      <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+        <div>
+          <strong>${a.name}</strong><br>
+          <small class="text-muted">${a.role}</small>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="deleteApprover(${a.id})"><i class="fas fa-trash"></i></button>
+      </div>
+    `).join('');
+  }
+  
+  // Update checkboxes
+  const checkboxes = document.getElementById('approversCheckboxes');
+  if (checkboxes) {
+    checkboxes.innerHTML = approvers.map(a => `
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${a.id}" id="approver-${a.id}">
+        <label class="form-check-label" for="approver-${a.id}">
+          ${a.name} (${a.role})
+        </label>
+      </div>
+    `).join('');
+  }
+}
+
+async function addApprover() {
+  const user_id = document.getElementById('approverUser').value;
+  const name = document.getElementById('approverName').value.trim();
+  const role = document.getElementById('approverRole').value;
+  
+  if (!user_id || !name) return alert('Fill all fields');
+  
+  const res = await fetch('/api/leave-approvers', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id, name, role})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById('approverUser').value = '';
+    document.getElementById('approverName').value = '';
+    loadApprovers();
+    alert('Approver added successfully!');
+  } else {
+    alert(data.error);
+  }
+}
+
+async function deleteApprover(id) {
+  if (!confirm('Remove this approver?')) return;
+  
+  await fetch(`/api/leave-approvers/${id}`, {method: 'DELETE'});
+  loadApprovers();
+}
+
+async function loadLeaveRequestsForApproval() {
+  try {
+    const res = await fetch('/api/leave-requests');
+    const data = await res.json();
+    leaveRequests = data.requests || [];
+    
+    console.log('All leave requests:', leaveRequests);
+    
+    const select = document.getElementById('selectLeaveRequest');
+    if (select) {
+      // Show ALL requests, not just pending ones
+      const options = leaveRequests.map(r => 
+        `<option value="${r.id}">${r.user_name} - ${r.leave_type_name} (${r.from_date} to ${r.to_date}) [${r.status}]</option>`
+      ).join('');
+      
+      select.innerHTML = '<option value="">Select Leave Request</option>' + options;
+      
+      console.log('Loaded', leaveRequests.length, 'requests for approval assignment');
+    }
+  } catch (error) {
+    console.error('Error loading leave requests:', error);
+  }
+}
+
+function loadRequestDetails() {
+  const requestId = document.getElementById('selectLeaveRequest').value;
+  if (!requestId) return;
+  
+  const request = leaveRequests.find(r => r.id == requestId);
+  if (!request) return;
+  
+  const details = document.getElementById('requestDetails');
+  details.innerHTML = `
+    <div class="alert alert-info">
+      <strong>${request.user_name}</strong><br>
+      ${request.leave_type_name}: ${request.from_date} to ${request.to_date}<br>
+      Days: ${request.days} | Reason: ${request.reason || 'N/A'}
+    </div>
+  `;
+}
+
+async function loadUserApprovers() {
+  const userId = document.getElementById('selectUserForApprovers').value;
+  if (!userId) {
+    document.getElementById('currentUserApprovers').innerHTML = '';
+    return;
+  }
+  
+  try {
+    const res = await fetch(`/api/user-approvers-simple?user_id=${userId}`);
+    const data = await res.json();
+    
+    const div = document.getElementById('currentUserApprovers');
+    if (data.assignments.length === 0) {
+      div.innerHTML = '<div class="alert alert-info">No approvers assigned to this user</div>';
+    } else {
+      div.innerHTML = '<div class="alert alert-success"><strong>Current Approvers:</strong><br>' +
+        data.assignments.map(a => `• ${a.approver_name} (${a.approver_role})`).join('<br>') + '</div>';
+    }
+  } catch (error) {
+    console.error('Error loading user approvers:', error);
+  }
+}
+
+async function assignApproversToUser() {
+  const userId = document.getElementById('selectUserForApprovers').value;
+  if (!userId) return alert('Select a user');
+  
+  const checkboxes = document.querySelectorAll('#approversCheckboxes input[type="checkbox"]:checked');
+  const approver_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+  
+  if (approver_ids.length === 0) return alert('Select at least one approver');
+  
+  console.log('Assigning approvers:', approver_ids, 'to user:', userId);
+  
+  const resultDiv = document.getElementById('assignResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Assigning...';
+  
+  try {
+    const res = await fetch('/api/user-approvers-simple', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: parseInt(userId), approver_ids})
+    });
+    
+    const data = await res.json();
+    console.log('Assignment response:', data);
+    
+    if (data.success) {
+      resultDiv.innerHTML = `<div class="alert alert-success">Assigned ${data.count} approvers to user!</div>`;
+      loadUserApprovers(); // Refresh current approvers
+      
+      // Clear checkboxes
+      checkboxes.forEach(cb => cb.checked = false);
+      
+      setTimeout(() => resultDiv.innerHTML = '', 5000);
+    } else {
+      resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+    }
+  } catch (error) {
+    console.error('Assignment error:', error);
+    resultDiv.innerHTML = `<div class="alert alert-danger">Network error: ${error.message}</div>`;
+  }
+}
+
+// Keep the old function for backward compatibility
+async function assignApproversToRequest() {
+  const requestId = document.getElementById('selectLeaveRequest').value;
+  if (!requestId) return alert('Select a leave request');
+  
+  const checkboxes = document.querySelectorAll('#approversCheckboxes input[type="checkbox"]:checked');
+  const approver_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+  
+  if (approver_ids.length === 0) return alert('Select at least one approver');
+  
+  console.log('Assigning approvers:', approver_ids, 'to request:', requestId);
+  
+  const resultDiv = document.getElementById('assignResult');
+  resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Assigning...';
+  
+  try {
+    const res = await fetch(`/api/leave-requests/${requestId}/assign-approvers`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({approver_ids})
+    });
+    
+    const data = await res.json();
+    console.log('Assignment response:', data);
+    
+    if (data.success) {
+      resultDiv.innerHTML = `<div class="alert alert-success">Assigned ${data.count} approvers! (IDs: ${approver_ids.join(', ')})</div>`;
+      loadApprovals();
+      loadRequests(); // Refresh requests table
+      
+      // Clear checkboxes
+      checkboxes.forEach(cb => cb.checked = false);
+      
+      setTimeout(() => resultDiv.innerHTML = '', 5000);
+    } else {
+      resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+    }
+  } catch (error) {
+    console.error('Assignment error:', error);
+    resultDiv.innerHTML = `<div class="alert alert-danger">Network error: ${error.message}</div>`;
+  }
+}
+
+async function loadApprovals() {
+  const res = await fetch('/api/leave-requests');
+  const data = await res.json();
+  const requests = data.requests || [];
+  
+  let allApprovals = [];
+  
+  for (const request of requests) {
+    const approvalRes = await fetch(`/api/leave-requests/${request.id}/approvals`);
+    const approvalData = await approvalRes.json();
+    
+    if (approvalData.success && approvalData.approvals.length > 0) {
+      approvalData.approvals.forEach(approval => {
+        approval.request = request;
+        allApprovals.push(approval);
+      });
+      
+      // Update approval status in requests table
+      const statusDiv = document.getElementById(`approval-status-${request.id}`);
+      if (statusDiv) {
+        const summary = approvalData.summary;
+        statusDiv.innerHTML = `
+          <small>
+            ${summary.approved}/${summary.total} approved<br>
+            <span class="badge bg-${summary.overall_status === 'fully_approved' ? 'success' : 
+                                   summary.overall_status === 'rejected' ? 'danger' : 'warning'}">
+              ${summary.overall_status.replace('_', ' ')}
+            </span>
+          </small>
+        `;
+      }
+    }
+  }
+  
+  const tbody = document.getElementById('approvalsTable');
+  if (tbody) {
+    tbody.innerHTML = allApprovals.map(a => {
+      const statusBadge = {
+        pending: 'warning',
+        approved: 'success',
+        rejected: 'danger'
+      }[a.status];
+      
+      const actions = a.status === 'pending' ? `
+        <button class="btn btn-sm btn-success" onclick="approveIndividual(${a.id})"><i class="fas fa-check"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="rejectIndividual(${a.id})"><i class="fas fa-times"></i></button>
+      ` : '-';
+      
+      return `
+        <tr>
+          <td>${a.leave_request_id}</td>
+          <td>${a.request.user_name}</td>
+          <td>${a.request.leave_type_name}</td>
+          <td>${a.request.from_date} to ${a.request.to_date}</td>
+          <td>${a.approver_name}</td>
+          <td><span class="badge bg-secondary">${a.approver_role}</span></td>
+          <td><span class="badge bg-${statusBadge}">${a.status}</span></td>
+          <td>${a.comments || '-'}</td>
+          <td>${actions}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+async function approveIndividual(approvalId) {
+  const comments = prompt('Add comments (optional):');
+  
+  const res = await fetch(`/api/leave-approvals/${approvalId}/approve`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({comments: comments || ''})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert(data.all_approved ? 'Approved! All approvers have approved this request.' : 'Approved!');
+    loadApprovals();
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+async function rejectIndividual(approvalId) {
+  const comments = prompt('Add rejection reason:');
+  if (!comments) return;
+  
+  const res = await fetch(`/api/leave-approvals/${approvalId}/reject`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({comments})
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    alert('Request rejected!');
+    loadApprovals();
+    loadRequests();
+  } else {
+    alert(data.error);
+  }
+}
+
+function testMultipleSelection() {
+  const checkboxes = document.querySelectorAll('#approversCheckboxes input[type="checkbox"]:checked');
+  const approver_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+  
+  console.log('Selected checkboxes:', checkboxes.length);
+  console.log('Selected approver IDs:', approver_ids);
+  
+  alert(`Selected ${checkboxes.length} approvers: ${approver_ids.join(', ')}`);
+}
+
+async function loadAllUserApprovers() {
+  try {
+    const res = await fetch('/api/user-approvers-simple');
+    const data = await res.json();
+    
+    console.log('All user approver assignments:', data.assignments);
+    
+    // Group by user
+    const byUser = {};
+    data.assignments.forEach(a => {
+      if (!byUser[a.user_id]) byUser[a.user_id] = [];
+      byUser[a.user_id].push(a);
+    });
+    
+    console.log('Grouped by user:', byUser);
+  } catch (error) {
+    console.error('Error loading all user approvers:', error);
+  }
+}
+
+async function autoAssignMissingApprovers(requests) {
+  for (const request of requests) {
+    if (request.status === 'pending') {
+      try {
+        // Check if request has approvers
+        const approvalRes = await fetch(`/api/leave-requests/${request.id}/approvals`);
+        const approvalData = await approvalRes.json();
+        
+        if (!approvalData.success || approvalData.approvals.length === 0) {
+          // No approvers assigned, try to auto-assign
+          const userApproversRes = await fetch(`/api/user-approvers-simple?user_id=${request.user_id}`);
+          const userApproversData = await userApproversRes.json();
+          
+          if (userApproversData.success && userApproversData.assignments.length > 0) {
+            const approver_ids = userApproversData.assignments.map(a => a.approver_id);
+            
+            await fetch(`/api/leave-requests/${request.id}/assign-approvers`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({approver_ids})
+            });
+            
+            console.log(`Auto-assigned ${approver_ids.length} approvers to request ${request.id}`);
+          }
+        }
+      } catch (error) {
+        console.error(`Error auto-assigning approvers to request ${request.id}:`, error);
+      }
+    }
+  }
+}
+
+async function viewApprovals(requestId) {
+  const res = await fetch(`/api/leave-requests/${requestId}/approvals`);
+  const data = await res.json();
+  
+  if (data.success) {
+    const summary = data.summary;
+    const approvals = data.approvals;
+    
+    let message = `Approval Status:\n\n`;
+    message += `Total Approvers: ${summary.total}\n`;
+    message += `Approved: ${summary.approved}\n`;
+    message += `Rejected: ${summary.rejected}\n`;
+    message += `Pending: ${summary.pending}\n`;
+    message += `Overall Status: ${summary.overall_status.replace('_', ' ')}\n\n`;
+    
+    message += `Individual Approvals:\n`;
+    approvals.forEach(a => {
+      message += `• ${a.approver_name} (${a.approver_role}): ${a.status.toUpperCase()}`;
+      if (a.comments) message += ` - ${a.comments}`;
+      message += `\n`;
+    });
+    
+    alert(message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadLeaveTypes();
+  loadUsers();
+  loadRequests();
+  loadApprovers();
+  loadLeaveRequestsForApproval();
+  
+  const currentYear = new Date().getFullYear();
+  document.getElementById('leaveYear').value = currentYear;
+  document.getElementById('bulkLeaveYear').value = currentYear;
+  document.getElementById('defaultYear').value = currentYear;
+  document.getElementById('rolloverFromYear').value = currentYear;
+  document.getElementById('rolloverToYear').value = currentYear + 1;
+  
+  // Load approvals when approvers tab is shown
+  document.querySelector('a[href="#approvers"]').addEventListener('shown.bs.tab', () => {
+    loadApprovals();
+    loadLeaveRequestsForApproval();
+  });
+  
+  // Also load when approvers tab is clicked
+  document.querySelector('a[href="#approvers"]').addEventListener('click', () => {
+    setTimeout(() => {
+      loadLeaveRequestsForApproval();
+    }, 100);
+  });
+});
+</script>
+{% endblock %}
