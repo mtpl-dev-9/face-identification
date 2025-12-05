@@ -412,3 +412,38 @@ class Attendance(db.Model):
             "break_in_time": self.attendanceBreakInTime.isoformat() + "Z" if self.attendanceBreakInTime else None,
             "break_out_time": self.attendanceBreakOutTime.isoformat() + "Z" if self.attendanceBreakOutTime else None,
         }
+
+
+class ManualTimeEntry(db.Model):
+    __tablename__ = "mtpl_manual_time_entries"
+
+    entryId = db.Column("entryId", db.Integer, primary_key=True)
+    entryUserId = db.Column("entryUserId", db.Integer, nullable=False, index=True)
+    entryWorkingDate = db.Column("entryWorkingDate", db.Date, nullable=False, index=True)
+    entryCheckInTime = db.Column("entryCheckInTime", db.Time, nullable=True)
+    entryCheckOutTime = db.Column("entryCheckOutTime", db.Time, nullable=True)
+    entryBreakInTime = db.Column("entryBreakInTime", db.Time, nullable=True)
+    entryBreakOutTime = db.Column("entryBreakOutTime", db.Time, nullable=True)
+    entryCreatedAt = db.Column("entryCreatedAt", db.DateTime, default=get_ist_now)
+    entryUpdatedAt = db.Column("entryUpdatedAt", db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+    entryCreatedBy = db.Column("entryCreatedBy", db.Integer, nullable=True)
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.entryUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.entryUserId)
+        employee_code = user.userLogin if user else str(self.entryUserId)
+
+        return {
+            "id": self.entryId,
+            "user_id": self.entryUserId,
+            "user_name": user_name,
+            "employee_code": employee_code,
+            "working_date": self.entryWorkingDate.isoformat() if self.entryWorkingDate else None,
+            "check_in_time": self.entryCheckInTime.strftime("%H:%M:%S") if self.entryCheckInTime else None,
+            "check_out_time": self.entryCheckOutTime.strftime("%H:%M:%S") if self.entryCheckOutTime else None,
+            "break_in_time": self.entryBreakInTime.strftime("%H:%M:%S") if self.entryBreakInTime else None,
+            "break_out_time": self.entryBreakOutTime.strftime("%H:%M:%S") if self.entryBreakOutTime else None,
+            "created_at": self.entryCreatedAt.isoformat() + "Z" if self.entryCreatedAt else None,
+            "updated_at": self.entryUpdatedAt.isoformat() + "Z" if self.entryUpdatedAt else None,
+            "created_by": self.entryCreatedBy,
+        }

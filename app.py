@@ -21,7 +21,7 @@ load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport, ManualTimeEntry
 from multilevel_models import LeaveApprover, LeaveApproval
 from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
@@ -56,16 +56,34 @@ from face_utils import (
     encode_to_json,
     decode_from_json,
     check_face_exists,
+    FACE_RECOGNITION_AVAILABLE,
 )
-import face_recognition
+
+try:
+    import face_recognition  # type: ignore
+except Exception as e:  # pragma: no cover - environment-dependent
+    face_recognition = None  # type: ignore
+    import logging
+
+    logging.warning("Face recognition modules not available in app.py: %s", e)
+    print("Warning: Face recognition modules not available:", e)
+    print("Manual time entry and other non-face-recognition features will still work.")
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
-    # Load database configuration from .env
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{os.environ.get('DB_USER')}:{quote_plus(os.environ.get('DB_PASSWORD'))}@{os.environ.get('DB_HOST')}:{os.environ.get('DB_PORT')}/{os.environ.get('DB_NAME')}"
+    # Load database configuration from environment (with sensible defaults)
+    db_user = os.environ.get("DB_USER") or "root"
+    db_password = os.environ.get("DB_PASSWORD") or "zeenalbca"
+    db_host = os.environ.get("DB_HOST") or "localhost"
+    db_port = os.environ.get("DB_PORT") or "3306"
+    db_name = os.environ.get("DB_NAME") or "mtpl_website"
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = (
+        f"mysql+pymysql://{db_user}:{quote_plus(db_password)}@{db_host}:{db_port}/{db_name}"
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_pre_ping': True,
@@ -213,8 +231,220 @@ def create_app():
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 
+    # ---------- API: Manual Time Entries ----------
+    @app.route("/api/manual-time-entries", methods=["GET"])
+    def api_get_manual_time_entries():
+        """
+        Get Manual Time Entries
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+            required: false
+          - name: from_date
+            in: query
+            type: string
+            format: date
+          - name: to_date
+            in: query
+            type: string
+            format: date
+        responses:
+          200:
+            description: List of manual time entries
+        """
+        try:
+            query = ManualTimeEntry.query
+
+            user_id = request.args.get("user_id", type=int)
+            from_date_str = request.args.get("from_date")
+            to_date_str = request.args.get("to_date")
+
+            if user_id:
+                query = query.filter_by(entryUserId=user_id)
+
+            if from_date_str:
+                from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+                query = query.filter(ManualTimeEntry.entryWorkingDate >= from_date)
+
+            if to_date_str:
+                to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+                query = query.filter(ManualTimeEntry.entryWorkingDate <= to_date)
+
+            entries = query.order_by(
+                ManualTimeEntry.entryWorkingDate.desc(),
+                ManualTimeEntry.entryUserId.asc(),
+            ).all()
+
+            return jsonify(
+                {
+                    "success": True,
+                    "entries": [e.to_dict() for e in entries],
+                }
+            )
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/manual-time-entries", methods=["POST"])
+    def api_create_manual_time_entry():
+        """
+        Create / Update Manual Time Entry
+        ---
+        tags:
+          - Manual Time Entry
+        parameters:
+          - name: body
+            in: body
+            required: true
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                working_date:
+                  type: string
+                  format: date
+                check_in_time:
+                  type: string
+                  format: time
+                check_out_time:
+                  type: string
+                  format: time
+                break_in_time:
+                  type: string
+                  format: time
+                break_out_time:
+                  type: string
+                  format: time
+        responses:
+          200:
+            description: Manual time entry saved
+        """
+        try:
+            data = request.get_json() or {}
+
+            user_id = data.get("user_id")
+            working_date_str = data.get("working_date")
+            check_in_time_str = data.get("check_in_time")
+            check_out_time_str = data.get("check_out_time")
+            break_in_time_str = data.get("break_in_time")
+            break_out_time_str = data.get("break_out_time")
+            created_by = data.get("created_by")
+
+            if not user_id or not working_date_str:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "user_id and working_date are required",
+                        }
+                    ),
+                    400,
+                )
+
+            try:
+                working_date = datetime.strptime(working_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "Invalid working_date format. Use YYYY-MM-DD",
+                        }
+                    ),
+                    400,
+                )
+
+            def parse_time(value):
+                if not value:
+                    return None
+                try:
+                    return datetime.strptime(value, "%H:%M").time()
+                except ValueError:
+                    try:
+                        return datetime.strptime(value, "%H:%M:%S").time()
+                    except ValueError:
+                        return None
+
+            check_in_time = parse_time(check_in_time_str)
+            check_out_time = parse_time(check_out_time_str)
+            break_in_time = parse_time(break_in_time_str)
+            break_out_time = parse_time(break_out_time_str)
+
+            if any(
+                [
+                    check_in_time_str and not check_in_time,
+                    check_out_time_str and not check_out_time,
+                    break_in_time_str and not break_in_time,
+                    break_out_time_str and not break_out_time,
+                ]
+            ):
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "Invalid time format. Use HH:MM or HH:MM:SS",
+                        }
+                    ),
+                    400,
+                )
+
+            # Ensure user exists and is active
+            user = User.query.filter_by(userId=user_id, userIsActive="1").first()
+            if not user:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "User not found or inactive",
+                        }
+                    ),
+                    404,
+                )
+
+            # Upsert by (user, date)
+            entry = ManualTimeEntry.query.filter_by(
+                entryUserId=user_id, entryWorkingDate=working_date
+            ).first()
+
+            if not entry:
+                entry = ManualTimeEntry(
+                    entryUserId=user_id,
+                    entryWorkingDate=working_date,
+                )
+                db.session.add(entry)
+
+            entry.entryCheckInTime = check_in_time
+            entry.entryCheckOutTime = check_out_time
+            entry.entryBreakInTime = break_in_time
+            entry.entryBreakOutTime = break_out_time
+
+            # Track who created / updated this manual entry (e.g. Admin = 1, Manager = 2, User = 7)
+            if created_by is not None:
+                try:
+                    entry.entryCreatedBy = int(created_by)
+                except (TypeError, ValueError):
+                    entry.entryCreatedBy = entry.entryCreatedBy or 1
+            else:
+                # Default to Admin (1) when coming from this UI, so value is stored in DB but not shown
+                entry.entryCreatedBy = entry.entryCreatedBy or 1
+
+            db.session.commit()
+
+            return jsonify({"success": True, "entry": entry.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
+        if not FACE_RECOGNITION_AVAILABLE or face_recognition is None:
+            # Face recognition backend not available – skip matching
+            return None, None
+
         persons: List[Person] = Person.query.filter_by(biometricIsActive=True).all()
         if not persons:
             return None, None
@@ -254,6 +484,12 @@ def create_app():
             attendance_today=attendance_today,
             absent_count=absent_count
         )
+
+    @app.route("/manual-time-entries")
+    def manual_time_entries_view():
+        """Simple admin UI to view and manage manual time entries."""
+        users = User.query.filter_by(userIsActive='1').order_by(User.userFirstName.asc()).all()
+        return render_template("manual_time_entries.html", users=users)
 
     @app.route("/api/analytics/dashboard")
     def api_analytics_dashboard():
