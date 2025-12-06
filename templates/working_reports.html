@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+{% block content %}
+<h3 class="mb-3">Working Reports</h3>
+
+<div class="row mb-4">
+  <div class="col-md-4">
+    <!-- Search Reports Form -->
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">
+          <i class="fas fa-search"></i> Search Reports
+        </h5>
+        <form id="working-reports-form">
+          <div class="mb-3">
+            <label class="form-label">User ID <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="wr-user-id" placeholder="Enter user ID" required>
+            <small class="form-text text-muted">Required field</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date (Day Number)</label>
+            <input type="number" class="form-control" id="wr-date" placeholder="e.g., 1 for 1st day" min="1" max="31">
+            <small class="form-text text-muted">Day number (1-31) for specific day</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Month</label>
+            <input type="number" class="form-control" id="wr-month" placeholder="e.g., 11" min="1" max="12">
+            <small class="form-text text-muted">Month number (1-12) - Optional (uses current year if not specified)</small>
+            <div id="wr-month-error" class="text-danger small mt-1" style="display: none;"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Year</label>
+            <input type="number" class="form-control" id="wr-year" placeholder="e.g., 2025" min="2000" max="2100">
+            <small class="form-text text-muted">Year - Required if provided, month must also be filled</small>
+            <div id="wr-year-error" class="text-danger small mt-1" style="display: none;"></div>
+          </div>
+          <div class="alert alert-info small mb-3">
+            <strong>Examples:</strong><br>
+            • Only User ID: Last 7 days<br>
+            • User ID + Date: Specific day (uses current month/year if not specified)<br>
+            • User ID + Month: Entire month in current year<br>
+            • User ID + Year + Month: Specific month in specific year
+          </div>
+          <button type="submit" class="btn btn-primary w-100" id="wr-submit-btn">
+            <i class="fas fa-search"></i> Get Reports
+          </button>
+          <div id="wr-form-message" class="mt-2 small"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="card-title mb-0">Working Reports</h5>
+          <span id="wr-record-count" class="badge bg-secondary">0 records</span>
+        </div>
+        <div id="wr-search-info" class="alert alert-info py-2 px-3 small" style="display:none;"></div>
+        <div class="table-responsive">
+          <table class="table table-striped table-sm mb-0" id="wr-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User Full Name</th>
+                <th>Date</th>
+                <th>Clock In Time</th>
+                <th>Clock Out Time</th>
+                <th>Worked Hours</th>
+                <th>Total Hours Difference</th>
+              </tr>
+            </thead>
+            <tbody id="wr-tbody">
+              <tr><td colspan="7" class="text-center text-muted">Enter search criteria and click "Get Reports"</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("working-reports-form");
+  const msgEl = document.getElementById("wr-form-message");
+  const tbody = document.getElementById("wr-tbody");
+  const recordCount = document.getElementById("wr-record-count");
+  const searchInfoEl = document.getElementById("wr-search-info");
+  const submitBtn = document.getElementById("wr-submit-btn");
+  const monthInput = document.getElementById("wr-month");
+  const yearInput = document.getElementById("wr-year");
+  const monthError = document.getElementById("wr-month-error");
+  const yearError = document.getElementById("wr-year-error");
+
+  function showMessage(text, isError) {
+    msgEl.textContent = text;
+    msgEl.className = "mt-2 small " + (isError ? "text-danger" : "text-success");
+    setTimeout(() => {
+      msgEl.textContent = "";
+      msgEl.className = "mt-2 small";
+    }, 5000);
+  }
+
+  function showFieldError(fieldErrorEl, message) {
+    fieldErrorEl.textContent = message;
+    fieldErrorEl.style.display = "block";
+  }
+
+  function hideFieldError(fieldErrorEl) {
+    fieldErrorEl.textContent = "";
+    fieldErrorEl.style.display = "none";
+  }
+
+  function validateForm() {
+    const month = monthInput.value.trim();
+    const year = yearInput.value.trim();
+    let isValid = true;
+
+    // Hide previous errors
+    hideFieldError(monthError);
+    hideFieldError(yearError);
+
+    // If year is filled, month is compulsory
+    // (Month can be used without year - it will use current year)
+    if (year && !month) {
+      showFieldError(monthError, "Month is required when year is provided");
+      isValid = false;
+    }
+
+    // Enable/disable submit button
+    submitBtn.disabled = !isValid;
+    if (!isValid) {
+      submitBtn.classList.add("disabled");
+    } else {
+      submitBtn.classList.remove("disabled");
+    }
+
+    return isValid;
+  }
+
+  // Add event listeners for real-time validation
+  monthInput.addEventListener("input", validateForm);
+  monthInput.addEventListener("blur", validateForm);
+  yearInput.addEventListener("input", validateForm);
+  yearInput.addEventListener("blur", validateForm);
+
+  // Initial validation
+  validateForm();
+
+  function formatHours(hours) {
+    if (hours === null || hours === undefined) return "-";
+    const sign = hours >= 0 ? "+" : "";
+    return sign + hours.toFixed(2) + " hrs";
+  }
+
+  function loadRecords() {
+    const userId = document.getElementById("wr-user-id").value;
+    const dateDay = document.getElementById("wr-date").value;
+    const month = monthInput.value.trim();
+    const year = yearInput.value.trim();
+
+    if (!userId) {
+      showMessage("User ID is required", true);
+      return;
+    }
+
+    // Validate form before submitting
+    if (!validateForm()) {
+      showMessage("Please fix the validation errors above", true);
+      return;
+    }
+
+    tbody.innerHTML = "<tr><td colspan='7' class='text-center'>Loading...</td></tr>";
+    recordCount.textContent = "Loading...";
+
+    const params = new URLSearchParams();
+    params.append("user_id", userId);
+    if (dateDay) params.append("date", dateDay);
+    if (month) params.append("month", month);
+    if (year) params.append("year", year);
+
+    fetch("/api/working-reports?" + params.toString())
+      .then(res => {
+        if (!res.ok) {
+          // If response is not OK, try to get error message
+          return res.json().then(errData => {
+            // Check if it's a user not found error (404 or error message)
+            const errorMsg = errData.error || `HTTP ${res.status}: ${res.statusText}`;
+            if (res.status === 404 || errorMsg.toLowerCase().includes("user not found") || errorMsg.toLowerCase().includes("inactive")) {
+              throw new Error("USER_NOT_FOUND:" + userId);
+            }
+            throw new Error(errorMsg);
+          }).catch(() => {
+            // If 404, treat as user not found
+            if (res.status === 404) {
+              throw new Error("USER_NOT_FOUND:" + userId);
+            }
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          });
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (!data.success) {
+          // Check if it's a user not found error
+          const errorMsg = data.error || "Failed to load reports";
+          if (errorMsg.toLowerCase().includes("user not found") || errorMsg.toLowerCase().includes("inactive")) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan='7' class='text-center'>
+                  <div class="py-4">
+                    <i class="fas fa-user-plus fa-3x mb-3 text-info"></i><br>
+                    <h5 class="text-info mb-2">User ID ${userId} is Not Registered Yet</h5>
+                    <p class="text-muted mb-0">
+                      The user ID <strong>${userId}</strong> is not registered in the system yet.<br>
+                      Please register this user first or try with a different user ID.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            `;
+            recordCount.textContent = "0 records";
+            showMessage(`User ID ${userId} is not registered yet. Please register this user first.`, true);
+          } else {
+          tbody.innerHTML = "<tr><td colspan='7' class='text-center text-danger'>" + errorMsg + "</td></tr>";
+            recordCount.textContent = "0 records";
+            showMessage(errorMsg, true);
+          }
+          return;
+        }
+
+        if (!data.records || data.records.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan='7' class='text-center text-muted'>
+                <div class="py-3">
+                  <i class="fas fa-info-circle fa-2x mb-2 text-muted"></i><br>
+                  <strong>No reports found for the selected criteria</strong><br>
+                  <small class="text-muted">
+                    <strong>Try:</strong><br>
+                    • Check if the user ID is correct (you searched for User ID: ${userId})<br>
+                    • Verify there is attendance data or manual time entries for this user<br>
+                    • Go to "Manual Time" tab to add a record for this user<br>
+                    • Try searching with only User ID to see last 7 days<br>
+                    • Make sure dates are within the correct range
+                  </small>
+                </div>
+              </td>
+            </tr>
+          `;
+          recordCount.textContent = "0 records";
+          return;
+        }
+
+        tbody.innerHTML = "";
+        data.records.forEach((record, idx) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td><strong>${record.user_full_name || "-"}</strong></td>
+            <td>${record.date || "-"}</td>
+            <td>${record.clock_in_time || "-"}</td>
+            <td>${record.clock_out_time || "-"}</td>
+            <td>${record.worked_hours !== null && record.worked_hours !== undefined ? record.worked_hours.toFixed(2) + " hrs" : "-"}</td>
+            <td class="${record.total_hours_difference !== null && record.total_hours_difference !== undefined ? (record.total_hours_difference >= 0 ? 'text-success' : 'text-danger') : ''}">
+              ${formatHours(record.total_hours_difference)}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        recordCount.textContent = data.records.length + " record(s)";
+
+        // Show search info if available
+        if (data.search_info) {
+          const info = data.search_info;
+          searchInfoEl.style.display = "block";
+          searchInfoEl.innerHTML = `
+            <strong>Search Summary:</strong>
+            User ID: ${info.user_id} |
+            Date Range: ${info.date_range} |
+            Attendance Found: ${info.attendance_records_found} |
+            Manual Entries Found: ${info.manual_entries_found} |
+            Existing Records Found: ${info.existing_records_found}
+          `;
+        } else {
+          searchInfoEl.style.display = "none";
+          searchInfoEl.textContent = "";
+        }
+
+        showMessage("Reports loaded successfully", false);
+      })
+      .catch(err => {
+        console.error("Error fetching reports:", err);
+        
+        // Check if it's a user not found error (404 or user not found message)
+        const isUserNotFound = (err.message && (
+          err.message.startsWith("USER_NOT_FOUND:") ||
+          err.message.toLowerCase().includes("user not found") ||
+          err.message.toLowerCase().includes("inactive") ||
+          err.message.includes("404")
+        ));
+        
+        if (isUserNotFound) {
+          let notFoundUserId = userId;
+          if (err.message && err.message.startsWith("USER_NOT_FOUND:")) {
+            notFoundUserId = err.message.split(":")[1];
+          }
+          tbody.innerHTML = `
+            <tr>
+              <td colspan='7' class='text-center'>
+                <div class="py-4">
+                  <i class="fas fa-user-plus fa-3x mb-3 text-info"></i><br>
+                  <h5 class="text-info mb-2">User ID ${notFoundUserId} is Not Registered Yet</h5>
+                  <p class="text-muted mb-0">
+                    The user ID <strong>${notFoundUserId}</strong> is not registered in the system yet.<br>
+                    Please register this user first or try with a different user ID.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          `;
+        recordCount.textContent = "0 records";
+        searchInfoEl.style.display = "none";
+        searchInfoEl.textContent = "";
+          showMessage(`User ID ${notFoundUserId} is not registered yet. Please register this user first or try with a different user ID.`, true);
+        } else {
+          // Generic error
+          tbody.innerHTML = `
+            <tr>
+              <td colspan='7' class='text-center text-danger'>
+                <div class="py-3">
+                  <i class="fas fa-exclamation-triangle fa-2x mb-2"></i><br>
+                  <strong>Error: ${err.message}</strong><br>
+                  <small class="text-muted">Please check the browser console for more details</small>
+                </div>
+              </td>
+            </tr>
+          `;
+          recordCount.textContent = "0 records";
+          showMessage(`Error: ${err.message}`, true);
+        }
+      });
+  }
+
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    
+    // Validate before submitting
+    if (!validateForm()) {
+      showMessage("Please fix the validation errors above", true);
+      return;
+    }
+    
+    loadRecords();
+  });
+});
+</script>
+{% endblock %}
+
