@@ -398,3 +398,28 @@ CREATE TABLE IF NOT EXISTS mtpl_manual_time_entries (
     UNIQUE KEY unique_user_date (entryUserId, entryWorkingDate),
     FOREIGN KEY (entryUserId) REFERENCES mtpl_users(userId) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- Table: mtpl_working_reports
+-- Description: Stores calculated working records with worked hours and total hours difference
+-- ============================================
+-- Switch back to mtpl_website database for options table
+USE mtpl_website;
+INSERT IGNORE INTO mtpl_website.mtpl_options (optionKey, optionValue) VALUES ('standard_working_hours', '9');
+
+CREATE TABLE IF NOT EXISTS mtpl_working_reports (
+    recordId INT AUTO_INCREMENT PRIMARY KEY,
+    recordUserId INT NOT NULL,
+    recordDate DATE NOT NULL,
+    recordClockInTime TIME NULL,
+    recordClockOutTime TIME NULL,
+    recordWorkedHours DECIMAL(10, 2) NULL COMMENT 'Total worked hours for the day',
+    recordTotalHoursDifference DECIMAL(10, 2) NULL COMMENT 'Difference from standard 8 hours (positive = overtime, negative = pending)',
+    recordCreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    recordUpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_record_user_id (recordUserId),
+    INDEX idx_record_date (recordDate),
+    INDEX idx_record_user_date (recordUserId, recordDate),
+    UNIQUE KEY unique_user_date_record (recordUserId, recordDate),
+    FOREIGN KEY (recordUserId) REFERENCES mtpl_users(userId) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

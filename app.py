@@ -1,5 +1,7 @@
 import os
-from datetime import datetime, timedelta
+import json
+from collections import OrderedDict
+from datetime import datetime, timedelta, date
 from typing import List
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
@@ -12,6 +14,7 @@ from flask import (
     redirect,
     url_for,
     flash,
+    Response,
 )
 from flask_cors import CORS
 from flasgger import Swagger
@@ -21,13 +24,12 @@ load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport, ManualTimeEntry
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport, ManualTimeEntry, WorkingRecord, Option
 from multilevel_models import LeaveApprover, LeaveApproval
 from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
 from user_approvers_api import add_user_approvers_routes
 from sqlalchemy import and_, func
-from datetime import date, datetime as dt
 import pytz
 
 
@@ -48,7 +50,7 @@ def get_allowed_ips():
 
 def get_ist_now():
     """Get current time in IST"""
-    return dt.now(IST)
+    return datetime.now(IST)
 from face_utils import (
     load_image_from_file_storage,
     load_image_from_base64,
@@ -239,22 +241,96 @@ def create_app():
         ---
         tags:
           - Manual Time Entry
+        summary: Retrieve manual time entries with optional filters
+        description: |
+          Get a list of manual time entries. You can filter by user ID and date range.
+          Returns all entries if no filters are provided.
         parameters:
           - name: user_id
             in: query
             type: integer
             required: false
+            description: Filter by specific user ID
+            example: 1
           - name: from_date
             in: query
             type: string
             format: date
+            required: false
+            description: Start date for filtering (YYYY-MM-DD)
+            example: "2025-12-01"
           - name: to_date
             in: query
             type: string
             format: date
+            required: false
+            description: End date for filtering (YYYY-MM-DD)
+            example: "2025-12-31"
         responses:
           200:
-            description: List of manual time entries
+            description: Successful response with list of manual time entries
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      user_id:
+                        type: integer
+                        example: 1
+                      user_name:
+                        type: string
+                        example: "John Doe"
+                      employee_code:
+                        type: string
+                        example: "EMP001"
+                      working_date:
+                        type: string
+                        format: date
+                        example: "2025-12-05"
+                      check_in_time:
+                        type: string
+                        format: time
+                        example: "09:00:00"
+                      check_out_time:
+                        type: string
+                        format: time
+                        example: "18:00:00"
+                      break_in_time:
+                        type: string
+                        format: time
+                        example: "13:00:00"
+                      break_out_time:
+                        type: string
+                        format: time
+                        example: "13:30:00"
+                      created_at:
+                        type: string
+                        format: date-time
+                        example: "2025-12-05T09:00:00Z"
+                      updated_at:
+                        type: string
+                        format: date-time
+                        example: "2025-12-05T09:00:00Z"
+          500:
+            description: Server error
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                error:
+                  type: string
+                  example: "Internal server error"
         """
         try:
             query = ManualTimeEntry.query
@@ -295,33 +371,144 @@ def create_app():
         ---
         tags:
           - Manual Time Entry
+        summary: Create or update a manual time entry
+        description: |
+          Create a new manual time entry or update an existing one for a specific user and date.
+          If an entry already exists for the user and date, it will be updated.
+          All time fields are optional, but user_id and working_date are required.
+        consumes:
+          - application/json
+        produces:
+          - application/json
         parameters:
           - name: body
             in: body
             required: true
+            description: Manual time entry data
             schema:
               type: object
+              required:
+                - user_id
+                - working_date
               properties:
                 user_id:
                   type: integer
+                  description: ID of the user
+                  example: 1
                 working_date:
                   type: string
                   format: date
+                  description: Working date in YYYY-MM-DD format
+                  example: "2025-12-05"
                 check_in_time:
                   type: string
                   format: time
+                  description: Check-in time in HH:MM or HH:MM:SS format
+                  example: "09:00"
                 check_out_time:
                   type: string
                   format: time
+                  description: Check-out time in HH:MM or HH:MM:SS format
+                  example: "18:00"
                 break_in_time:
                   type: string
                   format: time
+                  description: Break start time in HH:MM or HH:MM:SS format
+                  example: "13:00"
                 break_out_time:
                   type: string
                   format: time
+                  description: Break end time in HH:MM or HH:MM:SS format
+                  example: "13:30"
+                created_by:
+                  type: integer
+                  description: ID of the admin/role who created this entry (optional, defaults to 1)
+                  example: 1
         responses:
           200:
-            description: Manual time entry saved
+            description: Manual time entry saved successfully
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                entry:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      example: 1
+                    user_id:
+                      type: integer
+                      example: 1
+                    user_name:
+                      type: string
+                      example: "John Doe"
+                    employee_code:
+                      type: string
+                      example: "EMP001"
+                    working_date:
+                      type: string
+                      format: date
+                      example: "2025-12-05"
+                    check_in_time:
+                      type: string
+                      format: time
+                      example: "09:00:00"
+                    check_out_time:
+                      type: string
+                      format: time
+                      example: "18:00:00"
+                    break_in_time:
+                      type: string
+                      format: time
+                      example: "13:00:00"
+                    break_out_time:
+                      type: string
+                      format: time
+                      example: "13:30:00"
+                    created_at:
+                      type: string
+                      format: date-time
+                      example: "2025-12-05T09:00:00Z"
+                    updated_at:
+                      type: string
+                      format: date-time
+                      example: "2025-12-05T09:00:00Z"
+          400:
+            description: Bad request - validation error
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                error:
+                  type: string
+                  example: "user_id and working_date are required"
+          404:
+            description: User not found or inactive
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                error:
+                  type: string
+                  example: "User not found or inactive"
+          500:
+            description: Server error
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                error:
+                  type: string
+                  example: "Internal server error"
         """
         try:
             data = request.get_json() or {}
@@ -439,6 +626,463 @@ def create_app():
             db.session.rollback()
             return jsonify({"success": False, "error": str(e)}), 500
 
+    # ---------- API: Working Reports ----------
+    def get_example_working_report():
+        """Helper function to get real example data from database for Swagger docs"""
+        try:
+            # Try to get a real record from database
+            example_record = WorkingRecord.query.first()
+            if example_record:
+                user = User.query.filter_by(userId=example_record.recordUserId).first()
+                user_name = f"{user.userFirstName} {user.userLastName}" if user else f"User {example_record.recordUserId}"
+                return {
+                    "success": True,
+                    "records": [{
+                        "user_full_name": user_name,
+                        "date": example_record.recordDate.isoformat() if example_record.recordDate else "2025-12-05",
+                        "clock_in_time": example_record.recordClockInTime.strftime("%H:%M:%S") if example_record.recordClockInTime else "09:30:00",
+                        "clock_out_time": example_record.recordClockOutTime.strftime("%H:%M:%S") if example_record.recordClockOutTime else "18:30:00",
+                        "worked_hours": float(example_record.recordWorkedHours) if example_record.recordWorkedHours is not None else 8.5,
+                        "total_hours_difference": float(example_record.recordTotalHoursDifference) if example_record.recordTotalHoursDifference is not None else 0.5
+                    }],
+                    "search_info": {
+                        "user_id": example_record.recordUserId,
+                        "date_range": f"{example_record.recordDate} to {example_record.recordDate}" if example_record.recordDate else "2025-12-05 to 2025-12-05",
+                        "attendance_records_found": 0,
+                        "manual_entries_found": 1,
+                        "existing_records_found": 1
+                    }
+                }
+        except Exception:
+            pass
+        # Fallback to default example if no data found
+        return {
+            "success": True,
+            "records": [{
+                "user_full_name": "Jay Chauhan",
+                "date": "2025-12-05",
+                "clock_in_time": "09:30:00",
+                "clock_out_time": "18:30:00",
+                "worked_hours": 8.5,
+                "total_hours_difference": 0.5
+            }],
+            "search_info": {
+                "user_id": 4,
+                "date_range": "2025-12-05 to 2025-12-05",
+                "attendance_records_found": 0,
+                "manual_entries_found": 1,
+                "existing_records_found": 0
+            }
+        }
+
+    @app.route("/api/working-reports", methods=["GET", "POST"])
+    def api_working_reports():
+        """
+        Get Working Reports
+        ---
+        tags:
+          - Reports
+        summary: Retrieve working reports based on user ID, date, month, and year
+        description: |
+          Get working reports with flexible filtering:
+          - Only userId: Returns last 7 days
+          - userId + date (day number): Returns specific day in current month
+          - userId + month: Returns entire month in current year
+          - userId + year + month: Returns specific month in specific year
+          
+          **Note:** When you execute this API, it will return real data from your database.
+        parameters:
+          - name: user_id
+            in: query
+            type: integer
+            required: true
+            description: User ID
+            example: 1
+          - name: date
+            in: query
+            type: integer
+            required: false
+            description: Day number (1-31) for specific day
+            example: 1
+          - name: month
+            in: query
+            type: integer
+            required: false
+            description: Month number (1-12)
+            example: 11
+          - name: year
+            in: query
+            type: integer
+            required: false
+            description: Year (required if month is provided)
+            example: 2025
+        responses:
+          200:
+            description: Successful response with working reports
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                records:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      user_full_name:
+                        type: string
+                        example: "Jay Chauhan"
+                      date:
+                        type: string
+                        format: date
+                        example: "2025-12-05"
+                      clock_in_time:
+                        type: string
+                        format: time
+                        example: "09:30:00"
+                      clock_out_time:
+                        type: string
+                        format: time
+                        example: "18:30:00"
+                      worked_hours:
+                        type: number
+                        format: float
+                        example: 8.5
+                      total_hours_difference:
+                        type: number
+                        format: float
+                        example: 0.5
+                search_info:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                      example: 4
+                    date_range:
+                      type: string
+                      example: "2025-12-05 to 2025-12-05"
+                    attendance_records_found:
+                      type: integer
+                      example: 0
+                    manual_entries_found:
+                      type: integer
+                      example: 1
+                    existing_records_found:
+                      type: integer
+                      example: 0
+            examples:
+              application/json:
+                success: true
+                records:
+                  - user_full_name: "Jay Chauhan"
+                    date: "2025-12-05"
+                    clock_in_time: "09:30:00"
+                    clock_out_time: "18:30:00"
+                    worked_hours: 8.5
+                    total_hours_difference: 0.5
+                search_info:
+                  user_id: 4
+                  date_range: "2025-12-05 to 2025-12-05"
+                  attendance_records_found: 0
+                  manual_entries_found: 1
+                  existing_records_found: 0
+        """
+        try:
+            # Get parameters from query string (GET) or JSON body (POST)
+            # For POST, try query params first (Swagger sends query params), then JSON body
+            if request.method == "GET":
+                user_id = request.args.get("user_id", type=int)
+                date_day = request.args.get("date", type=int)
+                month = request.args.get("month", type=int)
+                year = request.args.get("year", type=int)
+            else:
+                # POST: Try query parameters first (for Swagger UI compatibility)
+                user_id = request.args.get("user_id", type=int)
+                date_day = request.args.get("date", type=int)
+                month = request.args.get("month", type=int)
+                year = request.args.get("year", type=int)
+                
+                # If no query params, try JSON body
+                if user_id is None:
+                    try:
+                        data = request.get_json(force=True) or {}
+                        user_id = data.get("user_id")
+                        date_day = data.get("date")
+                        month = data.get("month")
+                        year = data.get("year")
+                    except Exception:
+                        # If JSON parsing fails, use query params (already set above)
+                        pass
+
+            if not user_id:
+                return jsonify({"success": False, "error": "user_id is required"}), 400
+
+            # Validate user exists
+            user = User.query.filter_by(userId=user_id, userIsActive="1").first()
+            if not user:
+                return jsonify({"success": False, "error": "User not found or inactive"}), 404
+
+            user_full_name = f"{user.userFirstName} {user.userLastName}".strip()
+
+            now = get_ist_now()
+            current_year = now.year
+            current_month = now.month
+
+            # Determine date range based on input
+            if date_day:
+                # userId + date: specific day
+                # If month and year are also provided, use them; otherwise use current month/year
+                target_year = year if year else current_year
+                target_month = month if month else current_month
+                try:
+                    target_date = date(target_year, target_month, date_day)
+                except ValueError:
+                    return jsonify({"success": False, "error": f"Invalid date: Day {date_day} doesn't exist in month {target_month}/{target_year}"}), 400
+                start_date = target_date
+                end_date = target_date
+            elif month:
+                # userId + month: entire month
+                if year:
+                    # userId + year + month: specific month in specific year
+                    try:
+                        start_date = date(year, month, 1)
+                        # Get last day of month
+                        if month == 12:
+                            end_date = date(year + 1, 1, 1) - timedelta(days=1)
+                        else:
+                            end_date = date(year, month + 1, 1) - timedelta(days=1)
+                    except ValueError:
+                        return jsonify({"success": False, "error": f"Invalid year/month: {year}/{month}"}), 400
+                else:
+                    # Only month provided, use current year
+                    try:
+                        start_date = date(current_year, month, 1)
+                        if month == 12:
+                            end_date = date(current_year + 1, 1, 1) - timedelta(days=1)
+                        else:
+                            end_date = date(current_year, month + 1, 1) - timedelta(days=1)
+                    except ValueError:
+                        return jsonify({"success": False, "error": f"Invalid month: {month}"}), 400
+            else:
+                # Only userId: last 7 days
+                end_date = now.date()
+                start_date = end_date - timedelta(days=6)
+
+            # Get attendance records from mtpl_attendance table
+            # Don't require clock_in_time to be not null - get all records in date range
+            attendance_records = Attendance.query.filter(
+                and_(
+                    Attendance.attendanceUserId == user_id,
+                    func.date(Attendance.attendanceTimestamp) >= start_date,
+                    func.date(Attendance.attendanceTimestamp) <= end_date
+                )
+            ).order_by(Attendance.attendanceTimestamp.asc()).all()
+
+            # Also check manual time entries
+            manual_entries = ManualTimeEntry.query.filter(
+                and_(
+                    ManualTimeEntry.entryUserId == user_id,
+                    ManualTimeEntry.entryWorkingDate >= start_date,
+                    ManualTimeEntry.entryWorkingDate <= end_date
+                )
+            ).all()
+
+            # Get existing working reports from database FIRST
+            existing_records = WorkingRecord.query.filter(
+                and_(
+                    WorkingRecord.recordUserId == user_id,
+                    WorkingRecord.recordDate >= start_date,
+                    WorkingRecord.recordDate <= end_date
+                )
+            ).all()
+
+            # Create a map of existing records by date
+            existing_by_date = {rec.recordDate: rec for rec in existing_records}
+
+            # Start with existing records from database
+            records = []
+            processed_dates = set()
+            
+            # Get current standard working hours from database (for recalculation)
+            current_standard_hours = Option.get_standard_working_hours()
+            
+            # Add existing records to response first (recalculate total_hours_difference with current standard)
+            for rec_date, rec in existing_by_date.items():
+                # Recalculate total_hours_difference using current standard hours from database
+                worked_hrs = float(rec.recordWorkedHours) if rec.recordWorkedHours is not None else None
+                recalculated_diff = None
+                if worked_hrs is not None:
+                    recalculated_diff = round(worked_hrs - current_standard_hours, 2)
+                
+                records.append(OrderedDict([
+                    ("user_full_name", user_full_name),
+                    ("date", rec_date.isoformat()),
+                    ("clock_in_time", rec.recordClockInTime.strftime("%H:%M:%S") if rec.recordClockInTime else None),
+                    ("clock_out_time", rec.recordClockOutTime.strftime("%H:%M:%S") if rec.recordClockOutTime else None),
+                    ("worked_hours", worked_hrs),
+                    ("total_hours_difference", recalculated_diff)
+                ]))
+                processed_dates.add(rec_date)
+
+            # Process attendance records
+            for att in attendance_records:
+                att_date = att.attendanceTimestamp.date()
+                if att_date in processed_dates:
+                    continue
+
+                clock_in = att.attendanceClockInTime
+                clock_out = att.attendanceClockOutTime
+
+                # Calculate worked hours
+                worked_hours = None
+                total_hours_difference = None
+
+                if clock_in and clock_out:
+                    # Calculate worked hours (considering break time if available)
+                    break_duration = timedelta(0)
+                    if att.attendanceBreakInTime and att.attendanceBreakOutTime:
+                        break_duration = att.attendanceBreakOutTime - att.attendanceBreakInTime
+
+                    total_duration = clock_out - clock_in
+                    worked_duration = total_duration - break_duration
+                    worked_hours = worked_duration.total_seconds() / 3600.0
+
+                    # Calculate total hours difference (using standard working hours from database)
+                    standard_hours = Option.get_standard_working_hours()
+                    total_hours_difference = worked_hours - standard_hours
+
+                # Save to database
+                working_record = WorkingRecord.query.filter_by(
+                    recordUserId=user_id,
+                    recordDate=att_date
+                ).first()
+
+                if not working_record:
+                    working_record = WorkingRecord(
+                        recordUserId=user_id,
+                        recordDate=att_date,
+                        recordClockInTime=clock_in.time() if clock_in else None,
+                        recordClockOutTime=clock_out.time() if clock_out else None,
+                        recordWorkedHours=worked_hours,
+                        recordTotalHoursDifference=total_hours_difference
+                    )
+                    db.session.add(working_record)
+                else:
+                    working_record.recordClockInTime = clock_in.time() if clock_in else working_record.recordClockInTime
+                    working_record.recordClockOutTime = clock_out.time() if clock_out else working_record.recordClockOutTime
+                    working_record.recordWorkedHours = worked_hours
+                    working_record.recordTotalHoursDifference = total_hours_difference
+
+                records.append(OrderedDict([
+                    ("user_full_name", user_full_name),
+                    ("date", att_date.isoformat()),
+                    ("clock_in_time", clock_in.strftime("%H:%M:%S") if clock_in else None),
+                    ("clock_out_time", clock_out.strftime("%H:%M:%S") if clock_out else None),
+                    ("worked_hours", round(worked_hours, 2) if worked_hours is not None else None),
+                    ("total_hours_difference", round(total_hours_difference, 2) if total_hours_difference is not None else None)
+                ]))
+
+                processed_dates.add(att_date)
+
+            # Process manual time entries (for dates not in attendance)
+            for manual in manual_entries:
+                if manual.entryWorkingDate in processed_dates:
+                    continue
+
+                clock_in_time = manual.entryCheckInTime
+                clock_out_time = manual.entryCheckOutTime
+                break_in_time = manual.entryBreakInTime
+                break_out_time = manual.entryBreakOutTime
+
+                worked_hours = None
+                total_hours_difference = None
+
+                if clock_in_time and clock_out_time:
+                    # Create datetime objects for calculation
+                    clock_in_dt = datetime.combine(manual.entryWorkingDate, clock_in_time)
+                    clock_out_dt = datetime.combine(manual.entryWorkingDate, clock_out_time)
+
+                    # Calculate break duration
+                    break_duration = timedelta(0)
+                    if break_in_time and break_out_time:
+                        break_in_dt = datetime.combine(manual.entryWorkingDate, break_in_time)
+                        break_out_dt = datetime.combine(manual.entryWorkingDate, break_out_time)
+                        break_duration = break_out_dt - break_in_dt
+
+                    total_duration = clock_out_dt - clock_in_dt
+                    worked_duration = total_duration - break_duration
+                    worked_hours = worked_duration.total_seconds() / 3600.0
+
+                    # Calculate total hours difference (using standard working hours from database)
+                    standard_hours = Option.get_standard_working_hours()
+                    total_hours_difference = worked_hours - standard_hours
+
+                # Save to database
+                working_record = WorkingRecord.query.filter_by(
+                    recordUserId=user_id,
+                    recordDate=manual.entryWorkingDate
+                ).first()
+
+                if not working_record:
+                    working_record = WorkingRecord(
+                        recordUserId=user_id,
+                        recordDate=manual.entryWorkingDate,
+                        recordClockInTime=clock_in_time,
+                        recordClockOutTime=clock_out_time,
+                        recordWorkedHours=worked_hours,
+                        recordTotalHoursDifference=total_hours_difference
+                    )
+                    db.session.add(working_record)
+                else:
+                    working_record.recordClockInTime = clock_in_time
+                    working_record.recordClockOutTime = clock_out_time
+                    working_record.recordWorkedHours = worked_hours
+                    working_record.recordTotalHoursDifference = total_hours_difference
+
+                records.append(OrderedDict([
+                    ("user_full_name", user_full_name),
+                    ("date", manual.entryWorkingDate.isoformat()),
+                    ("clock_in_time", clock_in_time.strftime("%H:%M:%S") if clock_in_time else None),
+                    ("clock_out_time", clock_out_time.strftime("%H:%M:%S") if clock_out_time else None),
+                    ("worked_hours", round(worked_hours, 2) if worked_hours is not None else None),
+                    ("total_hours_difference", round(total_hours_difference, 2) if total_hours_difference is not None else None)
+                ]))
+
+                processed_dates.add(manual.entryWorkingDate)
+
+            db.session.commit()
+
+            # Sort records by date
+            records.sort(key=lambda x: x["date"])
+
+            # Return response with search info (using OrderedDict to maintain field order)
+            response = OrderedDict([
+                ("success", True),
+                ("records", records),
+                ("search_info", OrderedDict([
+                    ("user_id", user_id),
+                    ("date_range", f"{start_date} to {end_date}"),
+                    ("attendance_records_found", len(attendance_records)),
+                    ("manual_entries_found", len(manual_entries)),
+                    ("existing_records_found", len(existing_records)),
+                ]))
+            ])
+
+            # Use json.dumps to ensure field order is preserved
+            return Response(
+                json.dumps(response, ensure_ascii=False),
+                mimetype='application/json'
+            )
+
+        except Exception as e:
+            db.session.rollback()
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error in api_working_reports: {str(e)}")
+            print(error_trace)
+            return jsonify({"success": False, "error": str(e), "trace": error_trace}), 500
+
     # ---------- helper: match face ----------
     def match_single_encoding(encoding):
         if not FACE_RECOGNITION_AVAILABLE or face_recognition is None:
@@ -490,6 +1134,11 @@ def create_app():
         """Simple admin UI to view and manage manual time entries."""
         users = User.query.filter_by(userIsActive='1').order_by(User.userFirstName.asc()).all()
         return render_template("manual_time_entries.html", users=users)
+
+    @app.route("/working-reports")
+    def working_reports_view():
+        """UI to search and view working reports based on user ID, date, month, and year."""
+        return render_template("working_reports.html")
 
     @app.route("/api/analytics/dashboard")
     def api_analytics_dashboard():
