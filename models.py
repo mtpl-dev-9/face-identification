@@ -434,6 +434,31 @@ class Attendance(db.Model):
         }
 
 
+class DailyAttendanceSummary(db.Model):
+    __tablename__ = "mtpl_daily_attendance_summary"
+
+    summaryId = db.Column('summaryId', db.Integer, primary_key=True)
+    summaryUserId = db.Column('summaryUserId', db.Integer, nullable=False, index=True)
+    summaryDate = db.Column('summaryDate', db.Date, nullable=False, index=True)
+    summaryClockInTime = db.Column('summaryClockInTime', db.Time, nullable=True)
+    summaryClockOutTime = db.Column('summaryClockOutTime', db.Time, nullable=True)
+    summaryWorkedHours = db.Column('summaryWorkedHours', db.Numeric(5, 2), default=0.00)
+    summaryPendingHours = db.Column('summaryPendingHours', db.Numeric(5, 2), default=0.00)
+    summaryCreatedAt = db.Column('summaryCreatedAt', db.DateTime, default=get_ist_now)
+    summaryUpdatedAt = db.Column('summaryUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    def to_dict(self):
+        return {
+            "id": self.summaryId,
+            "user_id": self.summaryUserId,
+            "date": self.summaryDate.isoformat(),
+            "clock_in_time": self.summaryClockInTime.strftime("%H:%M:%S") if self.summaryClockInTime else None,
+            "clock_out_time": self.summaryClockOutTime.strftime("%H:%M:%S") if self.summaryClockOutTime else None,
+            "worked_hours": float(self.summaryWorkedHours),
+            "pending_hours": float(self.summaryPendingHours)
+        }
+
+
 class ManualTimeEntry(db.Model):
     __tablename__ = "mtpl_manual_time_entries"
 

@@ -169,7 +169,12 @@ INSERT IGNORE INTO settings (`key`, value) VALUES
 INSERT IGNORE INTO allowed_ips (ip_address, description, is_active) VALUES
 ('127.0.0.1', 'Localhost', 1),
 ('::1', 'Localhost IPv6', 1);
+-- Leave Allotment Table Schema
+-- This table stores leave allocations for users
 
+-- Sample data (optional)
+-- INSERT INTO mtpl_leave_allotment (allotmentUserId, allotmentLeaveTypeId, allotmentTotal, allotmentYear, allotmentAssignedBy)
+-- VALUES (1, 1, 4, 2024, 1), (1, 2, 7, 2024, 1), (1, 3, 0.5, 2024, 1);
 CREATE TABLE IF NOT EXISTS `mtpl_leave_allotment` (
   `allotmentId` INT NOT NULL AUTO_INCREMENT,
   `allotmentUserId` INT NOT NULL,
@@ -228,21 +233,6 @@ ORDER BY b.biometricId;
 
 -- Leave Allotment Table Schema
 -- This table stores leave allocations for users
-
-CREATE TABLE IF NOT EXISTS `mtpl_leave_allotment` (
-  `allotmentId` INT NOT NULL AUTO_INCREMENT,
-  `allotmentUserId` INT NOT NULL,
-  `allotmentLeaveTypeId` INT NOT NULL,
-  `allotmentTotal` DECIMAL(5,1) NOT NULL DEFAULT 0,
-  `allotmentYear` INT NOT NULL,
-  `allotmentAssignedBy` INT DEFAULT NULL,
-  `allotmentAssignedAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `allotmentUpdatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`allotmentId`),
-  KEY `idx_user_year` (`allotmentUserId`, `allotmentYear`),
-  KEY `idx_leave_type` (`allotmentLeaveTypeId`),
-  CONSTRAINT `fk_allotment_leave_type` FOREIGN KEY (`allotmentLeaveTypeId`) REFERENCES `mtpl_leave_types` (`leaveTypeId`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sample data (optional)
 -- INSERT INTO mtpl_leave_allotment (allotmentUserId, allotmentLeaveTypeId, allotmentTotal, allotmentYear, allotmentAssignedBy)
@@ -399,27 +389,21 @@ CREATE TABLE IF NOT EXISTS mtpl_manual_time_entries (
     FOREIGN KEY (entryUserId) REFERENCES mtpl_users(userId) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================
--- Table: mtpl_working_reports
--- Description: Stores calculated working records with worked hours and total hours difference
--- ============================================
--- Switch back to mtpl_website database for options table
-USE mtpl_website;
-INSERT IGNORE INTO mtpl_website.mtpl_options (optionKey, optionValue) VALUES ('standard_working_hours', '9');
+-- update the mtpl_option to the total working hours
+INSERT INTO mtpl_options (optionKey, optionValue) VALUES ('standard_working_hours', '9');
 
-CREATE TABLE IF NOT EXISTS mtpl_working_reports (
-    recordId INT AUTO_INCREMENT PRIMARY KEY,
-    recordUserId INT NOT NULL,
-    recordDate DATE NOT NULL,
-    recordClockInTime TIME NULL,
-    recordClockOutTime TIME NULL,
-    recordWorkedHours DECIMAL(10, 2) NULL COMMENT 'Total worked hours for the day',
-    recordTotalHoursDifference DECIMAL(10, 2) NULL COMMENT 'Difference from standard 8 hours (positive = overtime, negative = pending)',
-    recordCreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    recordUpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_record_user_id (recordUserId),
-    INDEX idx_record_date (recordDate),
-    INDEX idx_record_user_date (recordUserId, recordDate),
-    UNIQUE KEY unique_user_date_record (recordUserId, recordDate),
-    FOREIGN KEY (recordUserId) REFERENCES mtpl_users(userId) ON DELETE CASCADE
+-- Daily Attendance Summary Table
+CREATE TABLE IF NOT EXISTS mtpl_daily_attendance_summary (
+    summaryId INT AUTO_INCREMENT PRIMARY KEY,
+    summaryUserId INT NOT NULL,
+    summaryDate DATE NOT NULL,
+    summaryClockInTime TIME,
+    summaryClockOutTime TIME,
+    summaryWorkedHours DECIMAL(5,2) DEFAULT 0.00,
+    summaryPendingHours DECIMAL(5,2) DEFAULT 0.00,
+    summaryCreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    summaryUpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_date (summaryUserId, summaryDate),
+    INDEX idx_user_date (summaryUserId, summaryDate),
+    INDEX idx_date (summaryDate)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

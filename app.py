@@ -24,7 +24,7 @@ load_dotenv()
 
 from config import Config, calculate_distance, IST
 from database import db
-from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport, ManualTimeEntry, WorkingRecord, Option
+from models import Person, Attendance, Settings, AllowedIP, Holiday, User, LeaveAllotment, LeaveType, MonthlyReport, ManualTimeEntry, WorkingRecord, Option, DailyAttendanceSummary
 from multilevel_models import LeaveApprover, LeaveApproval
 from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
