@@ -407,3 +407,10 @@ CREATE TABLE IF NOT EXISTS mtpl_daily_attendance_summary (
     INDEX idx_user_date (summaryUserId, summaryDate),
     INDEX idx_date (summaryDate)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Add day_type column to leave requests table
+ALTER TABLE mtpl_leave_requests 
+ADD COLUMN leaveRequestDayType VARCHAR(10) DEFAULT 'full';
+-- Fix leaveRequestDays column to support decimal values (half days)
+ALTER TABLE mtpl_leave_requests 
+MODIFY COLUMN leaveRequestDays DECIMAL(5,1) NOT NULL;

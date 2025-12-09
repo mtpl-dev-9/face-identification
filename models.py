@@ -274,7 +274,8 @@ class LeaveRequest(db.Model):
     leaveRequestLeaveTypeId = db.Column('leaveRequestLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
     leaveRequestFromDate = db.Column('leaveRequestFromDate', db.Date, nullable=False)
     leaveRequestToDate = db.Column('leaveRequestToDate', db.Date, nullable=False)
-    leaveRequestDays = db.Column('leaveRequestDays', db.Integer, nullable=False)
+    leaveRequestDays = db.Column('leaveRequestDays', db.Numeric(5, 1), nullable=False)
+    leaveRequestDayType = db.Column('leaveRequestDayType', db.String(10), default='full')
     leaveRequestReason = db.Column('leaveRequestReason', db.Text)
     leaveRequestStatus = db.Column('leaveRequestStatus', db.String(20), default='pending')  # pending, approved, rejected
     leaveRequestApprovedBy = db.Column('leaveRequestApprovedBy', db.Integer, nullable=True)
@@ -295,7 +296,8 @@ class LeaveRequest(db.Model):
             "leave_type_name": self.leave_type.leaveTypeName,
             "from_date": self.leaveRequestFromDate.isoformat(),
             "to_date": self.leaveRequestToDate.isoformat(),
-            "days": self.leaveRequestDays,
+            "days": float(self.leaveRequestDays),
+            "day_type": self.leaveRequestDayType,
             "reason": self.leaveRequestReason,
             "status": self.leaveRequestStatus,
             "approved_by": self.leaveRequestApprovedBy,
@@ -420,17 +422,17 @@ class Attendance(db.Model):
             "person_id": self.attendanceUserId,
             "person_name": person_name,
             "employee_code": employee_code,
-            "timestamp": self.attendanceTimestamp.isoformat() + "Z",
+            "timestamp": self.attendanceTimestamp.isoformat() if self.attendanceTimestamp else None,
             "source": self.attendanceSource,
             "status": self.attendanceStatus,
             "action": self.attendanceAction,
             "latitude": self.attendanceLatitude,
             "longitude": self.attendanceLongitude,
             "ip_address": self.attendanceIpAddress,
-            "clock_in_time": self.attendanceClockInTime.isoformat() + "Z" if self.attendanceClockInTime else None,
-            "clock_out_time": self.attendanceClockOutTime.isoformat() + "Z" if self.attendanceClockOutTime else None,
-            "break_in_time": self.attendanceBreakInTime.isoformat() + "Z" if self.attendanceBreakInTime else None,
-            "break_out_time": self.attendanceBreakOutTime.isoformat() + "Z" if self.attendanceBreakOutTime else None,
+            "clock_in_time": self.attendanceClockInTime.isoformat()  if self.attendanceClockInTime else None,
+            "clock_out_time": self.attendanceClockOutTime.isoformat()  if self.attendanceClockOutTime else None,
+            "break_in_time": self.attendanceBreakInTime.isoformat()  if self.attendanceBreakInTime else None,
+            "break_out_time": self.attendanceBreakOutTime.isoformat()  if self.attendanceBreakOutTime else None,
         }
 
 
