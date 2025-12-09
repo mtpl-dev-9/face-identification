@@ -2051,7 +2051,26 @@ def create_app():
         """
         from models import LeaveType
         leave_types = LeaveType.query.filter_by(leaveTypeIsActive=True).all()
-        return jsonify({"success": True, "leave_types": [lt.to_dict() for lt in leave_types]})
+        year = get_ist_now().year
+        result = []
+        for lt in leave_types:
+            data = {
+                "leaveTypeId": lt.leaveTypeId,
+                "leaveTypeName": lt.leaveTypeName,
+                "leaveTypeIsPaid": lt.leaveTypeIsPaid,
+                "leaveTypeIsEncashable": lt.leaveTypeIsEncashable,
+                "leaveTypeRequireApproval": lt.leaveTypeRequireApproval,
+                "leaveTypeRequireAttachment": lt.leaveTypeRequireAttachment,
+                "leaveTypeIsActive": lt.leaveTypeIsActive
+            }
+            allocation = LeaveAllotment.query.filter_by(
+                allotmentLeaveTypeId=lt.leaveTypeId,
+                allotmentYear=year
+            ).first()
+            data["leaveTypeDefaultAllocation"] = float(allocation.allotmentTotal) if allocation else 0
+            result.append(data)
+        return jsonify({"success": True, "leaveTypes": result})
+      
     @app.route("/api/leave-creation-form", methods=["POST"])
     def api_add_leave_type():
         try:
