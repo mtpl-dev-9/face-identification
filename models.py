@@ -129,6 +129,9 @@ class User(db.Model):
     userFirstName = db.Column('userFirstName', db.String(64))
     userLastName = db.Column('userLastName', db.String(64))
     userLogin = db.Column('userLogin', db.String(16))
+    userPassword = db.Column('userPassword', db.String(255))
+    userAccessToken = db.Column('userAccessToken', db.Text)
+    userRefreshToken = db.Column('userRefreshToken', db.Text)
     userIsActive = db.Column('userIsActive', db.String(1), default='1')
 
     @property
