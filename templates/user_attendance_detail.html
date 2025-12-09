@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}User Attendance Detail{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>User Attendance Detail Report</h2>
+    
+    <div class="card mt-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <label>Select User</label>
+                    <select id="userId" class="form-control">
+                        <option value="">-- Select User --</option>
+                        {% for user in users %}
+                        <option value="{{ user.userId }}">{{ user.userFirstName }} {{ user.userLastName }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label>Year</label>
+                    <input type="number" id="year" class="form-control" placeholder="2025">
+                </div>
+                <div class="col-md-2">
+                    <label>Month</label>
+                    <input type="number" id="month" class="form-control" placeholder="1-12" min="1" max="12">
+                </div>
+                <div class="col-md-2">
+                    <label>Date</label>
+                    <input type="number" id="date" class="form-control" placeholder="1-31" min="1" max="31">
+                </div>
+                <div class="col-md-3">
+                    <label>&nbsp;</label>
+                    <button onclick="fetchReport()" class="btn btn-primary btn-block">Get Report</button>
+                </div>
+            </div>
+            <small class="text-muted">Leave all fields empty for last 7 days</small>
+        </div>
+    </div>
+
+    <div id="reportSection" class="mt-4" style="display:none;">
+        <div class="card">
+            <div class="card-header">
+                <h5 id="userName"></h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>User Full Name</th>
+                            <th>Date</th>
+                            <th>Clock In Time</th>
+                            <th>Clock Out Time</th>
+                            <th>Worked Hours</th>
+                            <th>Pending Hours / Overtime</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function fetchReport() {
+    const userId = document.getElementById('userId').value;
+    const year = document.getElementById('year').value;
+    const month = document.getElementById('month').value;
+    const date = document.getElementById('date').value;
+
+    if (!userId) {
+        alert('Please select a user');
+        return;
+    }
+
+    if (year && !month) {
+        alert('Month is mandatory when Year is provided');
+        return;
+    }
+
+    let url = `/api/attendance/user-detail?userId=${userId}`;
+    if (year) url += `&Year=${year}`;
+    if (month) url += `&Month=${month}`;
+    if (date) url += `&Date=${date}`;
+
+    fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('userName').textContent = `User: ${data.user_name || 'Unknown User'}`;
+                const tbody = document.getElementById('reportTable');
+                tbody.innerHTML = '';
+
+                data.details.forEach(d => {
+                    const row = `
+                        <tr>
+                            <td>${d.user_full_name}</td>
+                            <td>${d.date}</td>
+                            <td>${d.clock_in_time || '-'}</td>
+                            <td>${d.clock_out_time || '-'}</td>
+                            <td>${d.worked_hours} hrs</td>
+                            <td class="${d.pending_hours < 0 ? 'text-danger' : 'text-success'}">
+                                ${d.pending_hours} hrs
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+
+                document.getElementById('reportSection').style.display = 'block';
+            } else {
+                alert(data.error || 'Failed to fetch report');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error fetching report');
+        });
+}
+</script>
+{% endblock %}

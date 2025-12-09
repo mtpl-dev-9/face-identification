@@ -2004,7 +2004,7 @@ def create_app():
                 return jsonify({"success": False, "error": "Date and name required"}), 400
             
             try:
-                holiday_date = dt.strptime(date_str, '%Y-%m-%d').date()
+                holiday_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             except ValueError:
                 return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
             
@@ -2045,12 +2045,11 @@ def create_app():
           - Leave Management
         responses:
           200:
-            description: List of active leave types
+            description: List of active leave types with allocations
         """
         from models import LeaveType
         leave_types = LeaveType.query.filter_by(leaveTypeIsActive=True).all()
         return jsonify({"success": True, "leave_types": [lt.to_dict() for lt in leave_types]})
-
     @app.route("/api/leave-creation-form", methods=["POST"])
     def api_add_leave_type():
         try:
@@ -2524,7 +2523,7 @@ def create_app():
                   format: date
                 day_type:
                   type: string
-                  enum: [full, half]
+                  enum: [full, first_half, second_half]
                 reason:
                   type: string
         responses:
@@ -2544,17 +2543,31 @@ def create_app():
             return jsonify({"success": False, "error": "All fields required"}), 400
         
         try:
-            from_date = dt.strptime(from_date_str, '%Y-%m-%d').date()
-            to_date = dt.strptime(to_date_str, '%Y-%m-%d').date()
+            from_date = datetime.strptime(from_date_str, '%Y-%m-%d').date()
+            to_date = datetime.strptime(to_date_str, '%Y-%m-%d').date()
         except ValueError:
             return jsonify({"success": False, "error": "Invalid date format"}), 400
         
         if to_date < from_date:
             return jsonify({"success": False, "error": "To date must be after from date"}), 400
         
+        # Check for overlapping pending requests
+        overlapping = LeaveRequest.query.filter(
+            LeaveRequest.leaveRequestUserId == user_id,
+            LeaveRequest.leaveRequestStatus == 'pending',
+            LeaveRequest.leaveRequestFromDate <= to_date,
+            LeaveRequest.leaveRequestToDate >= from_date
+        ).first()
+        
+        if overlapping:
+            return jsonify({
+                "success": False, 
+                "error": f"You already have a pending leave request for overlapping dates ({overlapping.leaveRequestFromDate} to {overlapping.leaveRequestToDate}). Please wait for approval or cancel the previous request."
+            }), 400
+        
         # Calculate days based on day_type
         base_days = (to_date - from_date).days + 1
-        if day_type == 'half' and base_days == 1:
+        if day_type in ['first_half', 'second_half'] and base_days == 1:
             days = 0.5
         else:
             days = float(base_days)
@@ -2586,6 +2599,7 @@ def create_app():
             leaveRequestFromDate=from_date,
             leaveRequestToDate=to_date,
             leaveRequestDays=days,
+            leaveRequestDayType=day_type,
             leaveRequestReason=reason
         )
         db.session.add(leave_request)
@@ -3150,6 +3164,97 @@ def create_app():
     @app.route("/monthly-reports")
     def monthly_reports_view():
         return render_template("monthly_reports.html")
+
+    @app.route("/user-attendance-detail")
+    def user_attendance_detail_view():
+        users = User.query.filter_by(userIsActive='1').order_by(User.userFirstName.asc()).all()
+        return render_template("user_attendance_detail.html", users=users)
+
+    @app.route("/api/attendance/user-detail", methods=["GET"])
+    def api_user_attendance_detail():
+        from calendar import monthrange
+        user_id = request.args.get('userId', type=int)
+        year = request.args.get('Year', type=int)
+        month = request.args.get('Month', type=int)
+        date_param = request.args.get('Date', type=int)
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "userId required"}), 400
+        
+        user = User.query.filter_by(userId=user_id, userIsActive='1').first()
+        if not user:
+            return jsonify({"success": False, "error": "User not found"}), 404
+        
+        user_name = f"{user.userFirstName or ''} {user.userLastName or ''}".strip()
+        now = get_ist_now()
+        
+        if date_param and month and year:
+            start_date = datetime(year, month, date_param, 0, 0, 0, tzinfo=IST)
+            end_date = datetime(year, month, date_param, 23, 59, 59, tzinfo=IST)
+        elif month and year:
+            days_in_month = monthrange(year, month)[1]
+            start_date = datetime(year, month, 1, 0, 0, 0, tzinfo=IST)
+            end_date = datetime(year, month, days_in_month, 23, 59, 59, tzinfo=IST)
+        elif date_param:
+            start_date = datetime(now.year, now.month, date_param, 0, 0, 0, tzinfo=IST)
+            end_date = datetime(now.year, now.month, date_param, 23, 59, 59, tzinfo=IST)
+        elif month:
+            days_in_month = monthrange(now.year, month)[1]
+            start_date = datetime(now.year, month, 1, 0, 0, 0, tzinfo=IST)
+            end_date = datetime(now.year, month, days_in_month, 23, 59, 59, tzinfo=IST)
+        else:
+            start_date = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now
+        
+        records = Attendance.query.filter(
+            Attendance.attendanceUserId == user_id,
+            Attendance.attendanceTimestamp >= start_date,
+            Attendance.attendanceTimestamp <= end_date,
+            Attendance.attendanceClockInTime.isnot(None)
+        ).order_by(Attendance.attendanceTimestamp.asc()).all()
+        
+        details = []
+        for r in records:
+            worked_hours = 0
+            pending_hours = 0
+            
+            if r.attendanceClockInTime and r.attendanceClockOutTime:
+                break_duration = 0
+                if r.attendanceBreakInTime and r.attendanceBreakOutTime:
+                    break_duration = (r.attendanceBreakOutTime - r.attendanceBreakInTime).total_seconds() / 3600
+                worked_hours = (r.attendanceClockOutTime - r.attendanceClockInTime).total_seconds() / 3600 - break_duration
+                standard_hours = float(Settings.get('standard_working_hours', 9))
+                pending_hours = worked_hours - standard_hours
+                
+                summary = DailyAttendanceSummary.query.filter_by(
+                    summaryUserId=user_id,
+                    summaryDate=r.attendanceTimestamp.date()
+                ).first()
+                if not summary:
+                    summary = DailyAttendanceSummary(
+                        summaryUserId=user_id,
+                        summaryDate=r.attendanceTimestamp.date(),
+                        summaryClockInTime=r.attendanceClockInTime,
+                        summaryClockOutTime=r.attendanceClockOutTime,
+                        summaryWorkedHours=round(worked_hours, 2),
+                        summaryPendingHours=round(pending_hours, 2)
+                    )
+                    db.session.add(summary)
+            
+            details.append(OrderedDict([
+                ("user_full_name", user_name),
+                ("date", r.attendanceTimestamp.strftime("%Y-%m-%d")),
+                ("clock_in_time", r.attendanceClockInTime.strftime("%H:%M:%S") if r.attendanceClockInTime else None),
+                ("clock_out_time", r.attendanceClockOutTime.strftime("%H:%M:%S") if r.attendanceClockOutTime else None),
+                ("worked_hours", round(worked_hours, 2)),
+                ("pending_hours", round(pending_hours, 2))
+            ]))
+        
+        db.session.commit()
+        return Response(
+            json.dumps({"success": True, "user_name": user_name, "details": details}),
+            mimetype='application/json'
+        )
 
     return app
 
