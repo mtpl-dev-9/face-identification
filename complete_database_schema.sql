@@ -169,7 +169,12 @@ INSERT IGNORE INTO settings (`key`, value) VALUES
 INSERT IGNORE INTO allowed_ips (ip_address, description, is_active) VALUES
 ('127.0.0.1', 'Localhost', 1),
 ('::1', 'Localhost IPv6', 1);
+-- Leave Allotment Table Schema
+-- This table stores leave allocations for users
 
+-- Sample data (optional)
+-- INSERT INTO mtpl_leave_allotment (allotmentUserId, allotmentLeaveTypeId, allotmentTotal, allotmentYear, allotmentAssignedBy)
+-- VALUES (1, 1, 4, 2024, 1), (1, 2, 7, 2024, 1), (1, 3, 0.5, 2024, 1);
 CREATE TABLE IF NOT EXISTS `mtpl_leave_allotment` (
   `allotmentId` INT NOT NULL AUTO_INCREMENT,
   `allotmentUserId` INT NOT NULL,
@@ -228,21 +233,6 @@ ORDER BY b.biometricId;
 
 -- Leave Allotment Table Schema
 -- This table stores leave allocations for users
-
-CREATE TABLE IF NOT EXISTS `mtpl_leave_allotment` (
-  `allotmentId` INT NOT NULL AUTO_INCREMENT,
-  `allotmentUserId` INT NOT NULL,
-  `allotmentLeaveTypeId` INT NOT NULL,
-  `allotmentTotal` DECIMAL(5,1) NOT NULL DEFAULT 0,
-  `allotmentYear` INT NOT NULL,
-  `allotmentAssignedBy` INT DEFAULT NULL,
-  `allotmentAssignedAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `allotmentUpdatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`allotmentId`),
-  KEY `idx_user_year` (`allotmentUserId`, `allotmentYear`),
-  KEY `idx_leave_type` (`allotmentLeaveTypeId`),
-  CONSTRAINT `fk_allotment_leave_type` FOREIGN KEY (`allotmentLeaveTypeId`) REFERENCES `mtpl_leave_types` (`leaveTypeId`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sample data (optional)
 -- INSERT INTO mtpl_leave_allotment (allotmentUserId, allotmentLeaveTypeId, allotmentTotal, allotmentYear, allotmentAssignedBy)
@@ -368,3 +358,52 @@ INSERT IGNORE INTO mtpl_user_approvers (userApproverUserId, userApproverApprover
 (1, 8), (1, 9), (1, 10),  -- User 1 has Admin, HR, Manager approvers
 (4, 8), (4, 9),           -- User 4 has Admin, HR approvers
 (5, 9), (5, 10);          -- User 5 has HR, Manager approvers
+
+-- ============================================
+-- Manual Time Entry Table - MySQL Database Schema
+-- ============================================
+-- Database: MySQL 5.7+
+-- Timezone: IST (Asia/Kolkata, UTC+5:30)
+-- ============================================
+
+-- ============================================
+-- Table: mtpl_manual_time_entries
+-- Description: Stores manually entered time entries for users
+-- Allows admin to set fixed check-in, check-out, break-in, break-out times and working dates
+-- ============================================
+CREATE TABLE IF NOT EXISTS mtpl_manual_time_entries (
+    entryId INT AUTO_INCREMENT PRIMARY KEY,
+    entryUserId INT NOT NULL,
+    entryWorkingDate DATE NOT NULL,
+    entryCheckInTime TIME NULL,
+    entryCheckOutTime TIME NULL,
+    entryBreakInTime TIME NULL,
+    entryBreakOutTime TIME NULL,
+    entryCreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    entryUpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    entryCreatedBy INT NULL COMMENT 'Admin user ID who created this entry',
+    INDEX idx_entry_user_id (entryUserId),
+    INDEX idx_entry_working_date (entryWorkingDate),
+    INDEX idx_entry_user_date (entryUserId, entryWorkingDate),
+    UNIQUE KEY unique_user_date (entryUserId, entryWorkingDate),
+    FOREIGN KEY (entryUserId) REFERENCES mtpl_users(userId) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- update the mtpl_option to the total working hours
+INSERT INTO mtpl_options (optionKey, optionValue) VALUES ('standard_working_hours', '9');
+
+-- Daily Attendance Summary Table
+CREATE TABLE IF NOT EXISTS mtpl_daily_attendance_summary (
+    summaryId INT AUTO_INCREMENT PRIMARY KEY,
+    summaryUserId INT NOT NULL,
+    summaryDate DATE NOT NULL,
+    summaryClockInTime TIME,
+    summaryClockOutTime TIME,
+    summaryWorkedHours DECIMAL(5,2) DEFAULT 0.00,
+    summaryPendingHours DECIMAL(5,2) DEFAULT 0.00,
+    summaryCreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    summaryUpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_date (summaryUserId, summaryDate),
+    INDEX idx_user_date (summaryUserId, summaryDate),
+    INDEX idx_date (summaryDate)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

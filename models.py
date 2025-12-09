@@ -83,6 +83,26 @@ class Person(db.Model):
     def created_at(self):
         return self.biometricCreatedAt
 
+    @property
+    def name(self):
+        """Get user's full name from User table"""
+        user = User.query.filter_by(userId=self.biometricUserId).first()
+        if user and user.userFirstName and user.userLastName:
+            return f"{user.userFirstName} {user.userLastName}".strip()
+        elif user and user.userFirstName:
+            return user.userFirstName
+        else:
+            return f"User {self.biometricUserId}"
+
+    @property
+    def employee_code(self):
+        """Get employee code from User table"""
+        user = User.query.filter_by(userId=self.biometricUserId).first()
+        if user and user.userLogin:
+            return user.userLogin
+        else:
+            return str(self.biometricUserId)
+
     def to_dict(self):
         user = User.query.filter_by(userId=self.biometricUserId).first()
         if user and user.userFirstName and user.userLastName:
@@ -412,3 +432,147 @@ class Attendance(db.Model):
             "break_in_time": self.attendanceBreakInTime.isoformat() + "Z" if self.attendanceBreakInTime else None,
             "break_out_time": self.attendanceBreakOutTime.isoformat() + "Z" if self.attendanceBreakOutTime else None,
         }
+
+
+class DailyAttendanceSummary(db.Model):
+    __tablename__ = "mtpl_daily_attendance_summary"
+
+    summaryId = db.Column('summaryId', db.Integer, primary_key=True)
+    summaryUserId = db.Column('summaryUserId', db.Integer, nullable=False, index=True)
+    summaryDate = db.Column('summaryDate', db.Date, nullable=False, index=True)
+    summaryClockInTime = db.Column('summaryClockInTime', db.Time, nullable=True)
+    summaryClockOutTime = db.Column('summaryClockOutTime', db.Time, nullable=True)
+    summaryWorkedHours = db.Column('summaryWorkedHours', db.Numeric(5, 2), default=0.00)
+    summaryPendingHours = db.Column('summaryPendingHours', db.Numeric(5, 2), default=0.00)
+    summaryCreatedAt = db.Column('summaryCreatedAt', db.DateTime, default=get_ist_now)
+    summaryUpdatedAt = db.Column('summaryUpdatedAt', db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    def to_dict(self):
+        return {
+            "id": self.summaryId,
+            "user_id": self.summaryUserId,
+            "date": self.summaryDate.isoformat(),
+            "clock_in_time": self.summaryClockInTime.strftime("%H:%M:%S") if self.summaryClockInTime else None,
+            "clock_out_time": self.summaryClockOutTime.strftime("%H:%M:%S") if self.summaryClockOutTime else None,
+            "worked_hours": float(self.summaryWorkedHours),
+            "pending_hours": float(self.summaryPendingHours)
+        }
+
+
+class ManualTimeEntry(db.Model):
+    __tablename__ = "mtpl_manual_time_entries"
+
+    entryId = db.Column("entryId", db.Integer, primary_key=True)
+    entryUserId = db.Column("entryUserId", db.Integer, nullable=False, index=True)
+    entryWorkingDate = db.Column("entryWorkingDate", db.Date, nullable=False, index=True)
+    entryCheckInTime = db.Column("entryCheckInTime", db.Time, nullable=True)
+    entryCheckOutTime = db.Column("entryCheckOutTime", db.Time, nullable=True)
+    entryBreakInTime = db.Column("entryBreakInTime", db.Time, nullable=True)
+    entryBreakOutTime = db.Column("entryBreakOutTime", db.Time, nullable=True)
+    entryCreatedAt = db.Column("entryCreatedAt", db.DateTime, default=get_ist_now)
+    entryUpdatedAt = db.Column("entryUpdatedAt", db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+    entryCreatedBy = db.Column("entryCreatedBy", db.Integer, nullable=True)
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.entryUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.entryUserId)
+        employee_code = user.userLogin if user else str(self.entryUserId)
+
+        return {
+            "id": self.entryId,
+            "user_id": self.entryUserId,
+            "user_name": user_name,
+            "employee_code": employee_code,
+            "working_date": self.entryWorkingDate.isoformat() if self.entryWorkingDate else None,
+            "check_in_time": self.entryCheckInTime.strftime("%H:%M:%S") if self.entryCheckInTime else None,
+            "check_out_time": self.entryCheckOutTime.strftime("%H:%M:%S") if self.entryCheckOutTime else None,
+            "break_in_time": self.entryBreakInTime.strftime("%H:%M:%S") if self.entryBreakInTime else None,
+            "break_out_time": self.entryBreakOutTime.strftime("%H:%M:%S") if self.entryBreakOutTime else None,
+            "created_at": self.entryCreatedAt.isoformat() + "Z" if self.entryCreatedAt else None,
+            "updated_at": self.entryUpdatedAt.isoformat() + "Z" if self.entryUpdatedAt else None,
+            "created_by": self.entryCreatedBy,
+        }
+
+
+class WorkingRecord(db.Model):
+    __tablename__ = "mtpl_working_reports"
+
+    recordId = db.Column("recordId", db.Integer, primary_key=True)
+    recordUserId = db.Column("recordUserId", db.Integer, nullable=False, index=True)
+    recordDate = db.Column("recordDate", db.Date, nullable=False, index=True)
+    recordClockInTime = db.Column("recordClockInTime", db.Time, nullable=True)
+    recordClockOutTime = db.Column("recordClockOutTime", db.Time, nullable=True)
+    recordWorkedHours = db.Column("recordWorkedHours", db.Numeric(10, 2), nullable=True)
+    recordTotalHoursDifference = db.Column("recordTotalHoursDifference", db.Numeric(10, 2), nullable=True)
+    recordCreatedAt = db.Column("recordCreatedAt", db.DateTime, default=get_ist_now)
+    recordUpdatedAt = db.Column("recordUpdatedAt", db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    def to_dict(self):
+        user = User.query.filter_by(userId=self.recordUserId).first()
+        user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.recordUserId)
+
+        return {
+            "id": self.recordId,
+            "user_id": self.recordUserId,
+            "user_full_name": user_name,
+            "date": self.recordDate.isoformat() if self.recordDate else None,
+            "clock_in_time": self.recordClockInTime.strftime("%H:%M:%S") if self.recordClockInTime else None,
+            "clock_out_time": self.recordClockOutTime.strftime("%H:%M:%S") if self.recordClockOutTime else None,
+            "worked_hours": float(self.recordWorkedHours) if self.recordWorkedHours is not None else None,
+            "total_hours_difference": float(self.recordTotalHoursDifference) if self.recordTotalHoursDifference is not None else None,
+            "created_at": self.recordCreatedAt.isoformat() + "Z" if self.recordCreatedAt else None,
+            "updated_at": self.recordUpdatedAt.isoformat() + "Z" if self.recordUpdatedAt else None,
+        }
+
+
+class Option(db.Model):
+    __tablename__ = "mtpl_options"
+
+    optionId = db.Column("optionId", db.Integer, primary_key=True)
+    optionKey = db.Column("optionKey", db.String(100), unique=True, nullable=False)
+    optionValue = db.Column("optionValue", db.Text, nullable=True)
+    optionCreatedAt = db.Column("optionCreatedAt", db.DateTime, default=get_ist_now)
+    optionUpdatedAt = db.Column("optionUpdatedAt", db.DateTime, default=get_ist_now, onupdate=get_ist_now)
+
+    @staticmethod
+    def get(key, default=None):
+        """Get option value by key - always reads fresh from database"""
+        try:
+            # Use fresh query to ensure we get the latest value from database
+            # Each query execution reads directly from database (no caching)
+            option = Option.query.filter_by(optionKey=key).first()
+            if option:
+                # Ensure we get the latest value by refreshing from database
+                try:
+                    db.session.refresh(option)
+                except Exception:
+                    # If refresh fails, the query result is still fresh
+                    pass
+                return option.optionValue
+            return default
+        except Exception as e:
+            # If table doesn't exist or query fails, return default
+            print(f"Warning: Could not get option '{key}': {str(e)}")
+            return default
+
+    @staticmethod
+    def set(key, value):
+        """Set option value by key"""
+        option = Option.query.filter_by(optionKey=key).first()
+        if option:
+            option.optionValue = str(value)
+            option.optionUpdatedAt = get_ist_now()
+        else:
+            option = Option(optionKey=key, optionValue=str(value))
+            db.session.add(option)
+        db.session.commit()
+        return option
+
+    @staticmethod
+    def get_standard_working_hours():
+        """Get standard working hours from options, default to 8.0 if not set"""
+        hours_str = Option.get('standard_working_hours', '8')
+        try:
+            return float(hours_str)
+        except (ValueError, TypeError):
+            return 8.0

@@ -4,7 +4,19 @@ from typing import List
 
 import numpy as np
 from PIL import Image
-import face_recognition
+
+try:
+    import face_recognition  # type: ignore
+    FACE_RECOGNITION_AVAILABLE = True
+except Exception as e:  # pragma: no cover - environment-dependent
+    # dlib / face_recognition are optional – allow the app to run without them
+    FACE_RECOGNITION_AVAILABLE = False
+    face_recognition = None  # type: ignore
+    import logging
+
+    logging.warning("Face recognition modules not available: %s", e)
+    print("Warning: Face recognition modules not available:", e)
+    print("Manual time entry and other non-face-recognition features will still work.")
 
 
 def load_image_from_file_storage(file_storage) -> np.ndarray:
@@ -26,6 +38,10 @@ def load_image_from_base64(data_url: str) -> np.ndarray:
 
 def get_face_encodings(image_array: np.ndarray) -> List[np.ndarray]:
     """Return list of face encodings from an RGB numpy image array."""
+    if not FACE_RECOGNITION_AVAILABLE:
+        # No face-recognition backend – behave as if no faces were found
+        return []
+
     locations = face_recognition.face_locations(image_array)
     if not locations:
         return []
@@ -45,6 +61,10 @@ def decode_from_json(encoding_str: str) -> np.ndarray:
 
 def check_face_exists(new_encoding: np.ndarray, existing_encodings: List[np.ndarray], tolerance: float = 0.6) -> bool:
     """Check if a face encoding already exists in the database."""
+    if not FACE_RECOGNITION_AVAILABLE:
+        # Without face_recognition we cannot compare; treat as "no match"
+        return False
+
     if not existing_encodings:
         return False
     matches = face_recognition.compare_faces(existing_encodings, new_encoding, tolerance=tolerance)

@@ -1,0 +1,46 @@
+<<<<<<< HEAD
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+instance/
+.env
+*.db
+uploads/
+=======
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flask
+instance/
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.local
+
+# Uploads (if needed, uncomment)
+# uploads/
+
+>>>>>>> zeenal
