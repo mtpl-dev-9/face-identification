@@ -25,20 +25,18 @@
             <label class="form-label">Month</label>
             <input type="number" class="form-control" id="wr-month" placeholder="e.g., 11" min="1" max="12">
             <small class="form-text text-muted">Month number (1-12) - Optional (uses current year if not specified)</small>
-            <div id="wr-month-error" class="text-danger small mt-1" style="display: none;"></div>
           </div>
           <div class="mb-3">
             <label class="form-label">Year</label>
             <input type="number" class="form-control" id="wr-year" placeholder="e.g., 2025" min="2000" max="2100">
-            <small class="form-text text-muted">Year - Required if provided, month must also be filled</small>
-            <div id="wr-year-error" class="text-danger small mt-1" style="display: none;"></div>
+            <small class="form-text text-muted">Year - If provided, month must also be filled</small>
           </div>
           <div class="alert alert-info small mb-3">
             <strong>Examples:</strong><br>
-            • Only User ID: Last 7 days<br>
             • User ID + Date: Specific day (uses current month/year if not specified)<br>
             • User ID + Month: Entire month in current year<br>
-            • User ID + Year + Month: Specific month in specific year
+            • User ID + Year + Month: Specific month in specific year<br>
+            • User ID + Date + Year + Month: Specific date
           </div>
           <button type="submit" class="btn btn-primary w-100" id="wr-submit-btn">
             <i class="fas fa-search"></i> Get Reports
@@ -88,11 +86,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const recordCount = document.getElementById("wr-record-count");
   const searchInfoEl = document.getElementById("wr-search-info");
   const submitBtn = document.getElementById("wr-submit-btn");
-  const monthInput = document.getElementById("wr-month");
-  const yearInput = document.getElementById("wr-year");
-  const monthError = document.getElementById("wr-month-error");
-  const yearError = document.getElementById("wr-year-error");
-
   function showMessage(text, isError) {
     msgEl.textContent = text;
     msgEl.className = "mt-2 small " + (isError ? "text-danger" : "text-success");
@@ -101,52 +94,6 @@ document.addEventListener("DOMContentLoaded", function () {
       msgEl.className = "mt-2 small";
     }, 5000);
   }
-
-  function showFieldError(fieldErrorEl, message) {
-    fieldErrorEl.textContent = message;
-    fieldErrorEl.style.display = "block";
-  }
-
-  function hideFieldError(fieldErrorEl) {
-    fieldErrorEl.textContent = "";
-    fieldErrorEl.style.display = "none";
-  }
-
-  function validateForm() {
-    const month = monthInput.value.trim();
-    const year = yearInput.value.trim();
-    let isValid = true;
-
-    // Hide previous errors
-    hideFieldError(monthError);
-    hideFieldError(yearError);
-
-    // If year is filled, month is compulsory
-    // (Month can be used without year - it will use current year)
-    if (year && !month) {
-      showFieldError(monthError, "Month is required when year is provided");
-      isValid = false;
-    }
-
-    // Enable/disable submit button
-    submitBtn.disabled = !isValid;
-    if (!isValid) {
-      submitBtn.classList.add("disabled");
-    } else {
-      submitBtn.classList.remove("disabled");
-    }
-
-    return isValid;
-  }
-
-  // Add event listeners for real-time validation
-  monthInput.addEventListener("input", validateForm);
-  monthInput.addEventListener("blur", validateForm);
-  yearInput.addEventListener("input", validateForm);
-  yearInput.addEventListener("blur", validateForm);
-
-  // Initial validation
-  validateForm();
 
   function formatHours(hours) {
     if (hours === null || hours === undefined) return "-";
@@ -157,17 +104,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function loadRecords() {
     const userId = document.getElementById("wr-user-id").value;
     const dateDay = document.getElementById("wr-date").value;
-    const month = monthInput.value.trim();
-    const year = yearInput.value.trim();
+    const month = document.getElementById("wr-month").value.trim();
+    const year = document.getElementById("wr-year").value.trim();
 
     if (!userId) {
       showMessage("User ID is required", true);
-      return;
-    }
-
-    // Validate form before submitting
-    if (!validateForm()) {
-      showMessage("Please fix the validation errors above", true);
       return;
     }
 
@@ -189,6 +130,10 @@ document.addEventListener("DOMContentLoaded", function () {
             const errorMsg = errData.error || `HTTP ${res.status}: ${res.statusText}`;
             if (res.status === 404 || errorMsg.toLowerCase().includes("user not found") || errorMsg.toLowerCase().includes("inactive")) {
               throw new Error("USER_NOT_FOUND:" + userId);
+            }
+            // Check if it's a validation error (400)
+            if (res.status === 400) {
+              throw new Error("VALIDATION_ERROR:" + errorMsg);
             }
             throw new Error(errorMsg);
           }).catch(() => {
@@ -242,8 +187,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     • Check if the user ID is correct (you searched for User ID: ${userId})<br>
                     • Verify there is attendance data or manual time entries for this user<br>
                     • Go to "Manual Time" tab to add a record for this user<br>
-                    • Try searching with only User ID to see last 7 days<br>
-                    • Make sure dates are within the correct range
+                    • Make sure dates are within the correct range<br>
+                    • Try searching with different date, month, or year combinations
                   </small>
                 </div>
               </td>
@@ -294,6 +239,9 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch(err => {
         console.error("Error fetching reports:", err);
         
+        // Check if it's a validation error
+        const isValidationError = err.message && err.message.startsWith("VALIDATION_ERROR:");
+        
         // Check if it's a user not found error (404 or user not found message)
         const isUserNotFound = (err.message && (
           err.message.startsWith("USER_NOT_FOUND:") ||
@@ -302,7 +250,27 @@ document.addEventListener("DOMContentLoaded", function () {
           err.message.includes("404")
         ));
         
-        if (isUserNotFound) {
+        if (isValidationError) {
+          // Extract validation error message
+          const validationMsg = err.message.replace("VALIDATION_ERROR:", "");
+          tbody.innerHTML = `
+            <tr>
+              <td colspan='7' class='text-center'>
+                <div class="py-4">
+                  <i class="fas fa-exclamation-circle fa-3x mb-3 text-warning"></i><br>
+                  <h5 class="text-warning mb-2">Validation Error</h5>
+                  <p class="text-danger mb-0">
+                    <strong>${validationMsg}</strong>
+                  </p>
+                </div>
+              </td>
+            </tr>
+          `;
+          recordCount.textContent = "0 records";
+          searchInfoEl.style.display = "none";
+          searchInfoEl.textContent = "";
+          showMessage(validationMsg, true);
+        } else if (isUserNotFound) {
           let notFoundUserId = userId;
           if (err.message && err.message.startsWith("USER_NOT_FOUND:")) {
             notFoundUserId = err.message.split(":")[1];
@@ -321,9 +289,9 @@ document.addEventListener("DOMContentLoaded", function () {
               </td>
             </tr>
           `;
-        recordCount.textContent = "0 records";
-        searchInfoEl.style.display = "none";
-        searchInfoEl.textContent = "";
+          recordCount.textContent = "0 records";
+          searchInfoEl.style.display = "none";
+          searchInfoEl.textContent = "";
           showMessage(`User ID ${notFoundUserId} is not registered yet. Please register this user first or try with a different user ID.`, true);
         } else {
           // Generic error
@@ -346,16 +314,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
-    
-    // Validate before submitting
-    if (!validateForm()) {
-      showMessage("Please fix the validation errors above", true);
-      return;
-    }
-    
     loadRecords();
   });
 });
 </script>
-{% endblock %}
-
+{% endblock %}s
