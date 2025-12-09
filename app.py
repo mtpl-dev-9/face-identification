@@ -30,6 +30,8 @@ from multilevel_approval_apis import add_multilevel_approval_routes
 from user_approvers_model import UserApprover
 from user_approvers_api import add_user_approvers_routes
 from sqlalchemy import and_, func
+from werkzeug.security import generate_password_hash, check_password_hash
+from auth import token_required, generate_access_token, generate_refresh_token, verify_token
 import pytz
 
 
@@ -60,6 +62,8 @@ from face_utils import (
     check_face_exists,
     FACE_RECOGNITION_AVAILABLE,
 )
+from auth import generate_access_token, generate_refresh_token, verify_token, token_required
+from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     import face_recognition  # type: ignore
@@ -111,6 +115,9 @@ def create_app():
     # Add multi-level approval routes
     add_multilevel_approval_routes(app, db)
     
+    # ---------- Simple Database Token Auth ----------
+    from simple_db_auth import simple_token_required
+
     # Add user approvers routes (simple version)
     @app.route("/api/user-approvers-simple", methods=["GET"])
     def api_get_user_approvers_simple():
@@ -145,6 +152,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
     
     @app.route("/api/user-approvers-simple", methods=["POST"])
+    @simple_token_required
     def api_assign_approvers_simple():
         """
         Assign Approvers to User
@@ -365,6 +373,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
 
     @app.route("/api/manual-time-entries", methods=["POST"])
+    @token_required
     def api_create_manual_time_entry():
         """
         Create / Update Manual Time Entry
@@ -1347,6 +1356,7 @@ def create_app():
         return jsonify({"success": True, "persons": [p.to_dict() for p in persons]})
 
     @app.route("/api/users/bulk", methods=["POST"])
+    @token_required
     def api_bulk_add_users():
         try:
             data = request.get_json() or {}
@@ -1378,6 +1388,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
 
     @app.route("/api/persons/<int:person_id>", methods=["DELETE", "POST"])
+    @token_required
     def api_delete_person(person_id):
         try:
             person = Person.query.get(person_id)
@@ -1442,6 +1453,7 @@ def create_app():
         return jsonify(get_office_settings())
 
     @app.route("/api/settings", methods=["POST"])
+    @token_required
     def api_update_settings():
         """
         Update Office Settings
@@ -1481,6 +1493,7 @@ def create_app():
         return jsonify({"success": True, "ips": [ip.to_dict() for ip in ips]})
 
     @app.route("/api/allowed-ips", methods=["POST"])
+    @token_required
     def api_add_allowed_ip():
         data = request.get_json() or {}
         ip_address = data.get('ip_address')
@@ -1499,6 +1512,7 @@ def create_app():
         return jsonify({"success": True, "ip": ip.to_dict()})
 
     @app.route("/api/allowed-ips/<int:ip_id>", methods=["DELETE"])
+    @token_required
     def api_delete_allowed_ip(ip_id):
         ip = AllowedIP.query.get(ip_id)
         if not ip:
@@ -1510,6 +1524,7 @@ def create_app():
         return jsonify({"success": True})
 
     @app.route("/api/allowed-ips/<int:ip_id>/toggle", methods=["POST"])
+    @token_required
     def api_toggle_allowed_ip(ip_id):
         ip = AllowedIP.query.get(ip_id)
         if not ip:
@@ -1554,6 +1569,7 @@ def create_app():
         })
 
     @app.route("/api/biometric/<int:user_id>", methods=["DELETE"])
+    @token_required
     def api_delete_biometric(user_id):
         """Deactivate user's biometric data"""
         try:
@@ -1568,6 +1584,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
 
     @app.route("/api/register-face", methods=["POST"])
+    @token_required
     def api_register_face():
         name = request.form.get("name")
         user_id = request.form.get("employee_code")
@@ -1613,6 +1630,7 @@ def create_app():
         return jsonify({"success": True, "person": person.to_dict()})
 
     @app.route("/api/attendance/clock", methods=["POST"])
+    @token_required
     def api_attendance_clock():
         """
         Clock In/Out with Face Recognition
@@ -1754,6 +1772,7 @@ def create_app():
         })
 
     @app.route("/api/attendance/live-mark", methods=["POST"])
+    @token_required
     def api_attendance_live_mark():
         data = request.get_json(silent=True) or {}
         image_data = data.get("image")
@@ -1842,6 +1861,7 @@ def create_app():
         return jsonify({"success": True, "attendance": record.to_dict()})
 
     @app.route("/api/attendance/break", methods=["POST"])
+    @token_required
     def api_attendance_break():
         """
         Break In/Out
@@ -1973,6 +1993,7 @@ def create_app():
         return jsonify({"success": True, "holidays": [h.to_dict() for h in holidays]})
 
     @app.route("/api/holidays", methods=["POST"])
+    @token_required
     def api_add_holiday():
         """
         Add New Holiday
@@ -2023,6 +2044,7 @@ def create_app():
             return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
 
     @app.route("/api/holidays/<int:holiday_id>", methods=["DELETE"])
+    @token_required
     def api_delete_holiday(holiday_id):
         holiday = Holiday.query.get(holiday_id)
         if not holiday:
@@ -2072,6 +2094,7 @@ def create_app():
         return jsonify({"success": True, "leaveTypes": result})
       
     @app.route("/api/leave-creation-form", methods=["POST"])
+    @token_required
     def api_add_leave_type():
         try:
             from models import LeaveType
@@ -2487,6 +2510,7 @@ def create_app():
         return jsonify({"success": True, "balance": balance.to_dict()})
 
     @app.route("/api/leave-requests", methods=["GET"])
+    @token_required
     def api_get_leave_requests():
         """
         Get Leave Requests
@@ -2519,6 +2543,7 @@ def create_app():
         return jsonify({"success": True, "requests": [r.to_dict() for r in requests]})
 
     @app.route("/api/leave-requests", methods=["POST"])
+    @token_required
     def api_create_leave_request():
         """
         Create Leave Request
@@ -2629,6 +2654,7 @@ def create_app():
         return jsonify({"success": True, "request": leave_request.to_dict()})
 
     @app.route("/api/leave-requests/<int:request_id>/approve", methods=["POST"])
+    @token_required
     def api_approve_leave_request(request_id):
         """
         Approve Leave Request
@@ -2670,6 +2696,7 @@ def create_app():
         return jsonify({"success": True, "request": leave_request.to_dict()})
 
     @app.route("/api/leave-requests/<int:request_id>/reject", methods=["POST"])
+    @token_required
     def api_reject_leave_request(request_id):
         """
         Reject Leave Request
@@ -2712,6 +2739,7 @@ def create_app():
 
     #  --- Leave Allotment APIs ---
     @app.route("/api/leave-allotments", methods=["GET"])
+    @token_required
     def api_get_leave_allotments():
         """
         Get Leave Allotments
@@ -2755,6 +2783,7 @@ def create_app():
         return jsonify({"success": True, "allotments": result})
 
     @app.route("/api/leave-allotments", methods=["POST"])
+    @token_required
     def api_create_leave_allotment():
         """
         Create Leave Allotment
@@ -3192,6 +3221,7 @@ def create_app():
         return render_template("user_attendance_detail.html", users=users)
 
     @app.route("/api/attendance/user-detail", methods=["GET"])
+    @token_required
     def api_user_attendance_detail():
         from calendar import monthrange
         user_id = request.args.get('userId', type=int)
