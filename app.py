@@ -115,9 +115,40 @@ def create_app():
     # Add multi-level approval routes
     add_multilevel_approval_routes(app, db)
     
-    # ---------- Simple Database Token Auth ----------
-    from simple_db_auth import simple_token_required
-
+    # ---------- Authentication APIs ----------
+    @app.route("/api/auth/login", methods=["POST"])
+    def api_login():
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        password = data.get('password')
+        
+        if not user_id or not password:
+            return jsonify({'success': False, 'error': 'user_id and password required'}), 400
+        
+        user = User.query.filter_by(userId=user_id, userIsActive='1').first()
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+        
+        if not hasattr(user, 'userPassword') or not user.userPassword:
+            return jsonify({'success': False, 'error': 'Password not set'}), 401
+        
+        if not check_password_hash(user.userPassword, password):
+            return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+        
+        access_token = generate_access_token(user.userId)
+        refresh_token = generate_refresh_token(user.userId)
+        
+        user.userRefreshToken = refresh_token
+        user.userTokenCreatedAt = get_ist_now()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {'user_id': user.userId, 'name': f"{user.userFirstName} {user.userLastName}".strip()}
+        })
+    
     # Add user approvers routes (simple version)
     @app.route("/api/user-approvers-simple", methods=["GET"])
     def api_get_user_approvers_simple():
@@ -152,7 +183,6 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
     
     @app.route("/api/user-approvers-simple", methods=["POST"])
-    @simple_token_required
     def api_assign_approvers_simple():
         """
         Assign Approvers to User
@@ -2541,7 +2571,6 @@ def create_app():
         return jsonify({"success": True, "requests": [r.to_dict() for r in requests]})
 
     @app.route("/api/leave-requests", methods=["POST"])
-    @token_required
     def api_create_leave_request():
         """
         Create Leave Request
