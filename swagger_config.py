@@ -21,7 +21,7 @@ swagger_template = {
     "swagger": "2.0",
     "info": {
         "title": "Face Recognition Attendance System API",
-        "description": "Complete API documentation for the Face Recognition Attendance System with clock in/out, geofencing, and holiday management",
+        "description": "Complete API documentation. **To authorize:** 1) Login at /api/auth/login 2) Copy access_token 3) Click Authorize button 4) Enter: Bearer YOUR_TOKEN",
         "version": "1.0.0",
         "contact": {
             "name": "API Support",
@@ -36,7 +36,7 @@ swagger_template = {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header",
-            "description": "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'"
+            "description": "Enter: Bearer YOUR_ACCESS_TOKEN"
         }
     }
 }
