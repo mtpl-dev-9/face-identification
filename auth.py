@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 from models import User
+
 SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
-print(f"AUTH.PY - SECRET_KEY loaded: {SECRET_KEY[:20]}...")
+
 ACCESS_TOKEN_EXPIRY = 60  # minutes
 REFRESH_TOKEN_EXPIRY = 30  # days
 def generate_access_token(user_id):
