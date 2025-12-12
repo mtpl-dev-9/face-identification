@@ -1603,9 +1603,21 @@ def create_app():
     def api_delete_biometric(user_id):
         """Deactivate user's biometric data"""
         try:
-            person = Person.query.filter_by(biometricUserId=user_id).first()
+            person = Person.query.filter_by(biometricUserId=user_id, biometricIsActive=True).first()
             if not person:
                 return jsonify({"success": False, "error": "No biometric found"}), 404
+            # Check if user is currently clocked in
+            now = get_ist_now()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            today_record = Attendance.query.filter(
+                and_(
+                    Attendance.attendanceUserId == user_id,
+                    Attendance.attendanceTimestamp >= today_start,
+                    Attendance.attendanceClockInTime.isnot(None)
+                )
+            ).order_by(Attendance.attendanceTimestamp.desc()).first()
+            if today_record and today_record.attendanceClockOutTime is None:
+                return jsonify({"success": False, "error": "Please clock out first before deleting biometric"}), 403
             person.biometricIsActive = False
             db.session.commit()
             return jsonify({"success": True, "message": "Biometric deactivated successfully"})
