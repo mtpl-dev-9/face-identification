@@ -271,7 +271,6 @@ class LeaveAllotment(db.Model):
 
 class LeaveRequest(db.Model):
     __tablename__ = "mtpl_leave_requests"
-
     leaveRequestId = db.Column('leaveRequestId', db.Integer, primary_key=True)
     leaveRequestUserId = db.Column('leaveRequestUserId', db.Integer, nullable=False, index=True)
     leaveRequestLeaveTypeId = db.Column('leaveRequestLeaveTypeId', db.Integer, db.ForeignKey('mtpl_leave_types.leaveTypeId'), nullable=False)
@@ -283,14 +282,12 @@ class LeaveRequest(db.Model):
     leaveRequestStatus = db.Column('leaveRequestStatus', db.String(20), default='pending')  # pending, approved, rejected
     leaveRequestApprovedBy = db.Column('leaveRequestApprovedBy', db.Integer, nullable=True)
     leaveRequestApprovedAt = db.Column('leaveRequestApprovedAt', db.DateTime, nullable=True)
+    leaveRequestRejectionReason = db.Column('leaveRequestRejectionReason', db.Text, nullable=True)
     leaveRequestCreatedAt = db.Column('leaveRequestCreatedAt', db.DateTime, default=get_ist_now)
-
     leave_type = db.relationship('LeaveType', backref='requests')
-
     def to_dict(self):
         user = User.query.filter_by(userId=self.leaveRequestUserId).first()
         user_name = f"{user.userFirstName} {user.userLastName}" if user else str(self.leaveRequestUserId)
-        
         return {
             "id": self.leaveRequestId,
             "user_id": self.leaveRequestUserId,
@@ -305,9 +302,9 @@ class LeaveRequest(db.Model):
             "status": self.leaveRequestStatus,
             "approved_by": self.leaveRequestApprovedBy,
             "approved_at": self.leaveRequestApprovedAt.isoformat() + "Z" if self.leaveRequestApprovedAt else None,
+            "rejection_reason": self.leaveRequestRejectionReason,
             "created_at": self.leaveRequestCreatedAt.isoformat() + "Z"
         }
-
 
 class MonthlyReport(db.Model):
     __tablename__ = "mtpl_monthly_reports"
