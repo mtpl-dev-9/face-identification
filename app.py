@@ -151,6 +151,7 @@ def create_app():
     
     # Add user approvers routes (simple version)
     @app.route("/api/user-approvers-simple", methods=["GET"])
+    @token_required
     def api_get_user_approvers_simple():
         """
         Get User Approvers
@@ -183,6 +184,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
     
     @app.route("/api/user-approvers-simple", methods=["POST"])
+    @token_required
     def api_assign_approvers_simple():
         """
         Assign Approvers to User
@@ -244,6 +246,7 @@ def create_app():
 
     # ---------- API: Get Users ----------
     @app.route("/api/users", methods=["GET"])
+    @token_required
     def api_get_users():
         """
         Get All Users
@@ -273,6 +276,7 @@ def create_app():
 
     # ---------- API: Manual Time Entries ----------
     @app.route("/api/manual-time-entries", methods=["GET"])
+    @token_required
     def api_get_manual_time_entries():
         """
         Get Manual Time Entries
@@ -715,6 +719,7 @@ def create_app():
         }
 
     @app.route("/api/working-reports", methods=["GET", "POST"])
+    @token_required
     def api_working_reports():
         """
         Get Working Reports
@@ -1180,6 +1185,7 @@ def create_app():
         return render_template("working_reports.html")
 
     @app.route("/api/analytics/dashboard")
+    @token_required
     def api_analytics_dashboard():
         """
         Get Dashboard Analytics
@@ -1306,6 +1312,7 @@ def create_app():
         flash(f"Registered user ID {user_id} successfully", "success")
         return redirect(url_for("index"))
     @app.route("/api/register-face-live", methods=["POST"])
+    @token_required
     def api_register_face_live():
        try:
            data = request.get_json() or {}
@@ -1381,6 +1388,7 @@ def create_app():
         return render_template("persons.html", persons=persons)
 
     @app.route("/api/persons", methods=["GET"])
+    @token_required
     def api_get_persons():
         persons = Person.query.filter_by(biometricIsActive=True).order_by(Person.biometricCreatedAt.desc()).all()
         return jsonify({"success": True, "persons": [p.to_dict() for p in persons]})
@@ -1518,6 +1526,7 @@ def create_app():
         return jsonify({"success": True, "settings": get_office_settings()})
 
     @app.route("/api/allowed-ips", methods=["GET"])
+    @token_required
     def api_get_allowed_ips():
         ips = AllowedIP.query.all()
         return jsonify({"success": True, "ips": [ip.to_dict() for ip in ips]})
@@ -1568,6 +1577,7 @@ def create_app():
     # ---------- APIs ----------
 
     @app.route("/api/biometric/check/<int:user_id>", methods=["GET"])
+    @token_required
     def api_check_biometric(user_id):
         """Check if user has biometric registered"""
         person = Person.query.filter_by(biometricUserId=user_id, biometricIsActive=True).first()
@@ -1578,6 +1588,7 @@ def create_app():
         })
 
     @app.route("/api/attendance/check-status/<int:user_id>", methods=["GET"])
+    @token_required
     def api_check_attendance_status(user_id):
         """Check if user is currently clocked in"""
         now = get_ist_now()
@@ -1855,6 +1866,7 @@ def create_app():
         )
 
     @app.route("/api/attendance/latest", methods=["GET"])
+    @token_required
     def api_attendance_latest():
         """
         Get Latest Attendance Records
@@ -1874,6 +1886,7 @@ def create_app():
         )
 
     @app.route("/api/attendance/today/<user_id>", methods=["GET"])
+    @token_required
     def api_attendance_today(user_id):
         """
         Get Today's Attendance
@@ -2005,6 +2018,7 @@ def create_app():
         return render_template("holidays.html")
 
     @app.route("/api/holidays", methods=["GET"])
+    @token_required
     def api_get_holidays():
         """
         Get Holidays for Month
@@ -2101,6 +2115,7 @@ def create_app():
         return render_template("leave_management.html")
 
     @app.route("/api/leave-creation-form", methods=["GET"])
+    @token_required
     def api_get_leave_types():
         """
         Get All Leave Types
@@ -2182,6 +2197,7 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
 
     @app.route("/api/leave-creation-form/<int:leave_type_id>", methods=["PUT"])
+    @token_required
     def api_update_leave_type(leave_type_id):
         """
         Update Leave Type
@@ -2234,6 +2250,7 @@ def create_app():
         return jsonify({"success": True, "leave_type": leave_type.to_dict()})
 
     @app.route("/api/leave-creation-form/<int:leave_type_id>", methods=["DELETE"])
+    @token_required
     def api_delete_leave_type(leave_type_id):
         """
         Delete Leave Type
@@ -2260,6 +2277,7 @@ def create_app():
         return jsonify({"success": True})
 
     @app.route("/api/user-leave-balance", methods=["GET"])
+    @token_required
     def api_get_user_leave_balance():
         """
         Get User Leave Balance
@@ -2289,6 +2307,7 @@ def create_app():
         return jsonify({"success": True, "balances": [b.to_dict() for b in balances]})
 
     @app.route("/api/user-leave-balance/rollover", methods=["POST"])
+    @token_required
     def api_rollover_leave_balance():
         """
         Rollover Leave Balance to New Year
@@ -2355,6 +2374,7 @@ def create_app():
         return jsonify({"success": True, "count": len(created)})
 
     @app.route("/api/user-leave-balance/default", methods=["POST"])
+    @token_required
     def api_set_default_leave_balance():
         """
         Assign Default Leave Balance to All Users
@@ -2433,6 +2453,7 @@ def create_app():
         return jsonify({"success": True, "count": count, "users": len(users)})
 
     @app.route("/api/user-leave-balance/bulk", methods=["POST"])
+    @token_required
     def api_set_bulk_user_leave_balance():
         """
         Assign Leave Balance to Multiple Users
@@ -2494,6 +2515,7 @@ def create_app():
         return jsonify({"success": True, "count": len(results), "balances": [b.to_dict() for b in results]})
 
     @app.route("/api/user-leave-balance", methods=["POST"])
+    @token_required
     def api_set_user_leave_balance():
         """
         Assign Leave Balance
@@ -2583,6 +2605,7 @@ def create_app():
         return jsonify({"success": True, "requests": [r.to_dict() for r in requests]})
 
     @app.route("/api/leave-requests", methods=["POST"])
+    @token_required
     def api_create_leave_request():
         """
         Create Leave Request
@@ -2886,6 +2909,7 @@ def create_app():
         return jsonify({"success": True, "allotment": allotment.to_dict()})
 
     @app.route("/api/leave-allotments/bulk", methods=["POST"])
+    @token_required
     def api_create_bulk_leave_allotment():
         """
         Bulk Create Leave Allotments
@@ -2958,6 +2982,7 @@ def create_app():
         return jsonify({"success": True, "count": len(results), "verified_in_db": verify_count, "allotments": [a.to_dict() for a in results]})
 
     @app.route("/api/leave-allotments/<int:allotment_id>", methods=["DELETE"])
+    @token_required
     def api_delete_leave_allotment(allotment_id):
         """
         Delete Leave Allotment
@@ -2983,6 +3008,7 @@ def create_app():
         return jsonify({"success": True})
 
     @app.route("/api/leave-allotments/default", methods=["POST"])
+    @token_required
     def api_assign_default_leave_allotments():
         """
         Assign Default Leave Allotments to All Users
@@ -3067,6 +3093,7 @@ def create_app():
         return jsonify({"success": True, "count": count, "users": len(users)})
 
     @app.route("/api/attendance/monthly-report", methods=["GET"])
+    @token_required
     def api_monthly_attendance_report():
         """
         Generate Monthly Attendance Report
@@ -3221,6 +3248,7 @@ def create_app():
         return jsonify({"success": True, "report": report_data})
     
     @app.route("/api/monthly-reports", methods=["GET"])
+    @token_required
     def api_get_monthly_reports():
         """
         Get Saved Monthly Reports
